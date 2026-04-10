@@ -2,93 +2,46 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Análise FAP</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
-body {
-    font-family: Arial;
-    background: #0f172a;
-    color: #fff;
-    padding: 20px;
-}
-
-.container {
-    max-width: 1100px;
-    margin: auto;
-}
-
-.card {
-    background: #1e293b;
-    padding: 20px;
-    border-radius: 10px;
-    margin-bottom: 20px;
-}
-
-h2 {
-    margin-bottom: 15px;
-}
-
-.grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 15px;
-}
-
-input {
-    padding: 10px;
-    border-radius: 6px;
-    border: none;
-}
-
-button {
-    padding: 12px;
-    border: none;
-    border-radius: 6px;
-    background: #22c55e;
-    color: white;
-    font-weight: bold;
-    cursor: pointer;
-}
-
-button:hover {
-    background: #16a34a;
-}
-
-.resultado {
-    font-size: 18px;
-    margin-top: 10px;
-}
+body { font-family: Arial; background:#0f172a; color:white; padding:20px; }
+.container { max-width:1100px; margin:auto; }
+.card { background:#1e293b; padding:20px; border-radius:10px; margin-bottom:20px; }
+.grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+input, textarea { padding:10px; border-radius:6px; border:none; }
+button { padding:12px; background:#22c55e; border:none; border-radius:6px; color:white; cursor:pointer; }
+.resultado { margin-top:15px; }
 </style>
-
 </head>
 
 <body>
 <div class="container">
 
 <div class="card">
-<h2>🏢 Dados da Empresa</h2>
-
+<h2>🏢 Empresa</h2>
 <div class="grid">
-<input id="cnpj" placeholder="CNPJ">
 <input id="empresa" placeholder="Empresa">
-<input id="cnae" placeholder="CNAE">
+<input id="cnpj" placeholder="CNPJ">
 <input id="rat" placeholder="RAT (%)">
 <input id="folha" placeholder="Folha mensal">
-<input id="fap" placeholder="FAP atual">
-<input id="ano" placeholder="Ano de início (ex: 2024)">
+<input id="ano" placeholder="Ano início">
 </div>
 </div>
 
 <div class="card">
-<h2>📊 Histórico INSS</h2>
-
+<h2>📊 Histórico</h2>
 <div class="grid">
 <input id="b91" placeholder="B91">
-<input id="b92" placeholder="B92">
-<input id="b93" placeholder="B93">
-<input id="b94" placeholder="B94">
-<input id="cat" placeholder="CATs">
+<input id="cat" placeholder="CAT">
 </div>
+</div>
+
+<div class="card">
+<h2>📝 Anotações</h2>
+<textarea id="obs" rows="4" placeholder="Digite observações..."></textarea>
 </div>
 
 <div class="card">
@@ -96,38 +49,98 @@ button:hover {
 <button onclick="gerarPDF()">📄 Gerar PDF</button>
 
 <div class="resultado" id="resultado"></div>
+
+<canvas id="grafico"></canvas>
 </div>
 
 </div>
 
 <script>
-function calcular() {
 
-    let anoInicio = parseInt(document.getElementById("ano").value);
-    let anoAtual = new Date().getFullYear();
+let dadosPDF = "";
 
-    let tempo = anoAtual - anoInicio;
+function calcular(){
 
-    let msg = "";
+let rat = parseFloat(rat.value||0);
+let folha = parseFloat(folha.value||0);
+let ano = parseInt(ano.value||0);
+let b91 = parseInt(b91.value||0);
+let cat = parseInt(cat.value||0);
 
-    if (tempo < 5) {
-        msg += "⚠️ Empresa com menos de 5 anos (" + tempo + " anos).<br>";
-    } else {
-        msg += "✅ Empresa com histórico completo.<br>";
-    }
+let anos = new Date().getFullYear() - ano;
 
-    let b91 = parseInt(document.getElementById("b91").value || 0);
+// 🔥 FAP
+let fap = 1 + (b91*0.02) + (cat*0.01);
 
-    if (b91 > 5) {
-        msg += "⚠️ Alto índice de afastamentos B91.<br>";
-    }
+if(anos < 5) fap *= 0.8;
 
-    document.getElementById("resultado").innerHTML = msg;
+fap = Math.max(0.5, Math.min(2, fap));
+
+let ratAjustado = rat * fap;
+let custo = (ratAjustado/100)*folha;
+
+// 📉 SIMULAÇÃO
+let fapIdeal = 0.8;
+let economia = ((rat - (rat*fapIdeal))/100)*folha*12;
+
+// 🎯 RISCO
+let risco = "Baixo";
+if(fap>1.2) risco="Médio";
+if(fap>1.5) risco="Alto";
+
+// 🧠 IA SIMPLES
+let sugestoes = "";
+if(b91>5) sugestoes += "Reduzir afastamentos B91.\n";
+if(cat>3) sugestoes += "Investir em segurança do trabalho.\n";
+if(anos<5) sugestoes += "Empresa ainda em fase inicial.\n";
+
+dadosPDF = `
+FAP: ${fap.toFixed(2)}
+RAT Ajustado: ${ratAjustado.toFixed(2)}
+Custo: R$ ${custo.toFixed(2)}
+Economia potencial anual: R$ ${economia.toFixed(2)}
+Risco: ${risco}
+
+Sugestões:
+${sugestoes}
+
+Observações:
+${obs.value}
+`;
+
+resultado.innerHTML = dadosPDF.replace(/\n/g,"<br>");
+
+// 📊 GRÁFICO
+new Chart(document.getElementById("grafico"), {
+type:"bar",
+data:{
+labels:["FAP Atual","FAP Ideal"],
+datasets:[{
+label:"Comparação",
+data:[fap, fapIdeal]
+}]
+}
+});
 }
 
+// 📄 PDF
 function gerarPDF(){
-    alert("PDF gerado (implementar depois)");
+
+const { jsPDF } = window.jspdf;
+let doc = new jsPDF();
+
+// LOGO
+doc.addImage("logo.png", "PNG", 150, 10, 40, 20);
+
+doc.setFontSize(16);
+doc.text("Relatório FAP", 20, 20);
+
+doc.setFontSize(10);
+doc.text(dadosPDF, 20, 40);
+
+doc.save("relatorio_fap.pdf");
 }
+
 </script>
 
 </body>
