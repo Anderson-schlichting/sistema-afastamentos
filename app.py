@@ -1,29 +1,3 @@
-import streamlit as st
-import pandas as pd
-import requests
-import streamlit.components.v1 as components
-
-st.set_page_config(layout="wide")
-
-st.title("📊 Sistema Inteligente de Afastamentos + FAP")
-
-# ===== FUNÇÃO CONSULTA CNPJ =====
-@st.cache_data
-def buscar_empresa(cnpj):
-    try:
-        url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
-        r = requests.get(url, timeout=5)
-        if r.status_code == 200:
-            return r.json().get("razao_social", "")
-    except:
-        return ""
-
-# ===== ABAS =====
-aba1, aba2 = st.tabs(["📊 CNPJ Repetido", "📈 Análise FAP"])
-
-# ================================
-# 📊 ABA 1 - CNPJ REPETIDO
-# ================================
 with aba1:
 
     st.subheader("📊 Identificação de Empresas com Múltiplos Afastamentos")
@@ -31,70 +5,73 @@ with aba1:
     file = st.file_uploader("Envie a planilha Excel", type=["xlsx"])
 
     if file:
-        try:
-            df = pd.read_excel(file, engine="openpyxl")
 
-            # Limpa nomes das colunas
-            df.columns = df.columns.str.strip()
+        if st.button("🚀 Processar Planilha"):
 
-            # Detecta coluna de CNPJ automaticamente
-            col_cnpj = None
-            for col in df.columns:
-                if "CNPJ" in col.upper():
-                    col_cnpj = col
-                    break
+            progress = st.progress(0)
+            status = st.empty()
 
-            if not col_cnpj:
-                st.error("❌ Coluna de CNPJ não encontrada.")
-            else:
-                # Padroniza CNPJ (14 dígitos)
-                df[col_cnpj] = (
-                    df[col_cnpj]
-                    .astype(str)
-                    .str.replace(r'\D', '', regex=True)
-                    .str.zfill(14)
-                )
+            try:
+                status.text("📂 Lendo planilha...")
+                progress.progress(20)
 
-                # Conta repetições
-                contagem = df[col_cnpj].value_counts()
-                cnpjs_repetidos = contagem[contagem > 1].index
+                df = pd.read_excel(file, engine="openpyxl")
 
-                # Filtra dados
-                df_resultado = df[df[col_cnpj].isin(cnpjs_repetidos)]
+                df.columns = df.columns.str.strip()
 
-                # Busca nome da empresa
-                df_resultado["Empresa"] = df_resultado[col_cnpj].apply(buscar_empresa)
+                progress.progress(40)
+                status.text("🔍 Identificando coluna de CNPJ...")
 
-                st.success(f"✅ {df_resultado.shape[0]} registros encontrados")
+                col_cnpj = None
+                for col in df.columns:
+                    if "CNPJ" in col.upper():
+                        col_cnpj = col
+                        break
 
-                st.dataframe(df_resultado, use_container_width=True)
+                if not col_cnpj:
+                    st.error("❌ Coluna de CNPJ não encontrada.")
+                else:
 
-                # Download Excel
-                output = "relatorio.xlsx"
-                df_resultado.to_excel(output, index=False)
+                    progress.progress(60)
+                    status.text("🧹 Tratando dados...")
 
-                with open(output, "rb") as f:
-                    st.download_button(
-                        "📥 Baixar relatório",
-                        f,
-                        "relatorio_cnpj_repetidos.xlsx"
+                    df[col_cnpj] = (
+                        df[col_cnpj]
+                        .astype(str)
+                        .str.replace(r'\D', '', regex=True)
+                        .str.zfill(14)
                     )
 
-        except Exception as e:
-            st.error(f"Erro ao processar: {e}")
+                    progress.progress(75)
+                    status.text("📊 Identificando CNPJs repetidos...")
 
-# ================================
-# 📈 ABA 2 - SISTEMA FAP
-# ================================
-with aba2:
+                    contagem = df[col_cnpj].value_counts()
+                    cnpjs_repetidos = contagem[contagem > 1].index
 
-    st.subheader("📈 Análise Empresarial - FAP")
+                    df_resultado = df[df[col_cnpj].isin(cnpjs_repetidos)]
 
-    try:
-        with open("index.html", "r", encoding="utf-8") as f:
-            html_code = f.read()
+                    progress.progress(85)
+                    status.text("🌐 Consultando empresas na Receita...")
 
-        components.html(html_code, height=900, scrolling=True)
+                    df_resultado["Empresa"] = df_resultado[col_cnpj].apply(buscar_empresa)
 
-    except:
-        st.warning("⚠️ Arquivo index.html não encontrado.")
+                    progress.progress(100)
+                    status.text("✅ Finalizado!")
+
+                    st.success(f"✅ {df_resultado.shape[0]} registros encontrados")
+
+                    st.dataframe(df_resultado, use_container_width=True)
+
+                    # Download Excel
+                    output = "relatorio.xlsx"
+                    df_resultado.to_excel(output, index=False)
+
+                    with open(output, "rb") as f:
+                        st.download_button(
+                            "📥 Baixar relatório",
+                            f,
+                            "relatorio_cnpj_repetidos.xlsx"
+                        )
+
+            except Exception as e:
+                st.error(f"Erro ao processar: {e}")
