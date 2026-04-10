@@ -6,32 +6,50 @@ st.title("📊 Analisador de CNPJ Repetido")
 file = st.file_uploader("Envie a planilha Excel", type=["xlsx"])
 
 if file:
-    # Lê a primeira aba automaticamente
-    df = pd.read_excel(file, engine="openpyxl")
+    try:
+        # Lê automaticamente a primeira aba
+        df = pd.read_excel(file, engine="openpyxl")
 
-    # Nome da coluna de CNPJ (ajuste se necessário)
-    col_cnpj = "CNPJ/CEI Empregador"
+        # Limpa nomes das colunas
+        df.columns = df.columns.str.strip()
 
-    # Garantir string
-    df[col_cnpj] = df[col_cnpj].astype(str)
+        # Encontrar coluna de CNPJ automaticamente
+        col_cnpj = None
+        for col in df.columns:
+            if "CNPJ" in col.upper():
+                col_cnpj = col
+                break
 
-    # Encontrar CNPJs repetidos
-    repetidos = df[col_cnpj][df[col_cnpj].duplicated(keep=False)]
+        if not col_cnpj:
+            st.error("❌ Coluna de CNPJ não encontrada na planilha.")
+        else:
+            # Padroniza CNPJ
+            df[col_cnpj] = df[col_cnpj].astype(str).str.strip()
 
-    # Filtrar todas as linhas desses CNPJs
-    df_resultado = df[df[col_cnpj].isin(repetidos)]
+            # Identifica repetidos
+            repetidos = df[col_cnpj][df[col_cnpj].duplicated(keep=False)]
 
-    # Ordenar por CNPJ
-    df_resultado = df_resultado.sort_values(by=col_cnpj)
+            # Filtra todas as linhas desses CNPJs
+            df_resultado = df[df[col_cnpj].isin(repetidos)]
 
-    st.write("### Empresas com mais de um afastamento:")
-    st.dataframe(df_resultado)
+            # Ordena
+            df_resultado = df_resultado.sort_values(by=col_cnpj)
 
-    # Download Excel
-    output = df_resultado.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "📥 Baixar relatório",
-        output,
-        "relatorio_cnpj_repetidos.csv",
-        "text/csv"
-    )
+            st.success(f"✅ {df_resultado.shape[0]} registros encontrados")
+
+            st.dataframe(df_resultado, use_container_width=True)
+
+            # Download Excel (melhor que CSV)
+            output = pd.ExcelWriter("relatorio.xlsx", engine="xlsxwriter")
+            df_resultado.to_excel(output, index=False)
+            output.close()
+
+            with open("relatorio.xlsx", "rb") as f:
+                st.download_button(
+                    "📥 Baixar relatório em Excel",
+                    f,
+                    "relatorio_cnpj_repetidos.xlsx"
+                )
+
+    except Exception as e:
+        st.error(f"Erro ao processar a planilha: {e}")
