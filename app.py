@@ -1,36 +1,37 @@
 import streamlit as st
 import pandas as pd
 
-st.title("📊 Analisador de Afastamentos - Litoral SC")
+st.title("📊 Analisador de CNPJ Repetido")
 
 file = st.file_uploader("Envie a planilha Excel", type=["xlsx"])
 
 if file:
-    df = pd.read_excel(file, sheet_name="LITORAL SC")
+    # Lê a primeira aba automaticamente
+    df = pd.read_excel(file)
 
+    # Nome da coluna de CNPJ (ajuste se necessário)
     col_cnpj = "CNPJ/CEI Empregador"
-    col_motivo = "Natureza da Lesão"
 
+    # Garantir string
     df[col_cnpj] = df[col_cnpj].astype(str)
 
-    grouped = df.groupby(col_cnpj)
+    # Encontrar CNPJs repetidos
+    repetidos = df[col_cnpj][df[col_cnpj].duplicated(keep=False)]
 
-    resultado = []
+    # Filtrar todas as linhas desses CNPJs
+    df_resultado = df[df[col_cnpj].isin(repetidos)]
 
-    for cnpj, group in grouped:
-        if len(group) > 1:
-            motivos = group[col_motivo].dropna().unique()
+    # Ordenar por CNPJ
+    df_resultado = df_resultado.sort_values(by=col_cnpj)
 
-            resultado.append({
-                "CNPJ": cnpj,
-                "Quantidade Afastamentos": len(group),
-                "Motivos": ", ".join(map(str, motivos))
-            })
+    st.write("### Empresas com mais de um afastamento:")
+    st.dataframe(df_resultado)
 
-    result_df = pd.DataFrame(resultado).sort_values(by="Quantidade Afastamentos", ascending=False)
-
-    st.write("### Resultado:")
-    st.dataframe(result_df)
-
-    csv = result_df.to_csv(index=False).encode("utf-8")
-    st.download_button("📥 Baixar relatório", csv, "relatorio.csv", "text/csv")
+    # Download Excel
+    output = df_resultado.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "📥 Baixar relatório",
+        output,
+        "relatorio_cnpj_repetidos.csv",
+        "text/csv"
+    )
