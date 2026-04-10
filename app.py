@@ -72,22 +72,24 @@ CIDADES_SC = [ "ABDON BATISTA","ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA
 "ZORTÉA"]
 
 # ================================
-# 📂 LEITURA CSV (CORRIGIDA)
+# 📂 LEITURA (BLINDADA)
 # ================================
 def carregar_arquivo(file):
-    if file.name.endswith(".csv"):
-        for enc in ["utf-8", "latin1", "ISO-8859-1"]:
-            try:
-                return pd.read_csv(file, sep=None, engine="python", encoding=enc)
-            except:
-                continue
-        st.error("Erro ao ler CSV")
+    try:
+        if file.name.endswith(".csv"):
+            for enc in ["utf-8", "latin1", "ISO-8859-1"]:
+                try:
+                    return pd.read_csv(file, sep=None, engine="python", encoding=enc)
+                except:
+                    continue
+            return None
+        else:
+            return pd.read_excel(file)
+    except:
         return None
-    else:
-        return pd.read_excel(file, engine="openpyxl")
 
 # ================================
-# 🚀 API CONSULTA CNPJ
+# 🚀 API
 # ================================
 @st.cache_data(ttl=86400)
 def consultar_cnpj(cnpj):
@@ -98,18 +100,17 @@ def consultar_cnpj(cnpj):
         if r.status_code == 200:
             d = r.json()
             return {
-                "Empresa": d.get("razao_social",""),
+                "Empresa": d.get("razao_social","Não encontrado"),
                 "Fantasia": d.get("nome_fantasia",""),
                 "Telefone": d.get("ddd_telefone_1",""),
-                "Email": d.get("email",""),
                 "Cidade": d.get("municipio",""),
                 "UF": d.get("uf",""),
-                "CNAE": d.get("cnae_fiscal_descricao",""),
+                "Email": d.get("email","")
             }
     except:
         pass
 
-    return {}
+    return None
 
 # ================================
 # 🔍 FILTROS
@@ -117,12 +118,11 @@ def consultar_cnpj(cnpj):
 def aplicar_filtros(df, usar_sc=False, cidade=None):
     df = df.copy()
 
-    if usar_sc:
-        if "Estado" in df.columns:
-            df = df[df["Estado"].str.upper().str.contains("SANTA CATARINA|SC", na=False)]
+    if usar_sc and "Estado" in df.columns:
+        df = df[df["Estado"].astype(str).str.upper().str.contains("SC|SANTA CATARINA", na=False)]
 
-    if cidade and cidade != "Todas" and "Cidade" in df.columns:
-        df["Cidade"] = df["Cidade"].str.upper()
+    if cidade != "Todas" and "Cidade" in df.columns:
+        df["Cidade"] = df["Cidade"].astype(str).str.upper()
         df = df[df["Cidade"] == cidade]
 
     return df
@@ -130,9 +130,9 @@ def aplicar_filtros(df, usar_sc=False, cidade=None):
 # ================================
 # 🖥️ APP
 # ================================
-st.title("📊 Sistema Inteligente de Empresas")
+st.title("📊 Sistema Inteligente")
 
-aba1, aba2 = st.tabs(["📊 Análise de Empresas", "🔎 Consulta CNPJ"])
+aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta CNPJ"])
 
 # ================================
 # 📊 ABA 1
@@ -143,12 +143,22 @@ with aba1:
 
     if file and st.button("🚀 Processar"):
 
-        inicio = time.time()
-
         df = carregar_arquivo(file)
-        df.columns = df.columns.str.strip()
 
-        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
+        # 🔴 CORREÇÃO PRINCIPAL
+        if df is None:
+            st.error("❌ Erro ao ler arquivo. Verifique o CSV (separador ou encoding).")
+            st.stop()
+
+        df.columns = df.columns.astype(str).str.strip()
+
+        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()]
+
+        if not col_cnpj:
+            st.error("❌ Coluna CNPJ não encontrada")
+            st.stop()
+
+        col_cnpj = col_cnpj[0]
 
         df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r'\D','',regex=True).str.zfill(14)
 
@@ -156,30 +166,19 @@ with aba1:
         df_resultado = df[df[col_cnpj].isin(contagem[contagem > 1].index)]
 
         # filtros
-        usar_sc = st.sidebar.checkbox("Apenas SC")
-        cidade = st.sidebar.selectbox("Cidade", ["Todas"] + sorted(CIDADES_SC))
+        usar_sc = st.checkbox("Apenas SC")
+        cidade = st.selectbox("Cidade", ["Todas"] + CIDADES_SC)
 
         df_resultado = aplicar_filtros(df_resultado, usar_sc, cidade)
 
-        # API rápida
-        mapa = {}
-        for cnpj in df_resultado[col_cnpj].unique()[:50]:
-            dados = consultar_cnpj(cnpj)
-            mapa[cnpj] = dados.get("Empresa","")
-
-        df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa)
-
-        fim = time.time()
-
-        # ============================
+        # =====================
         # DASHBOARD
-        # ============================
-        st.markdown("## 📊 Dashboard")
+        # =====================
+        st.subheader("📊 Indicadores")
 
-        c1, c2, c3 = st.columns(3)
+        c1, c2 = st.columns(2)
         c1.metric("Empresas", df_resultado[col_cnpj].nunique())
         c2.metric("Registros", df_resultado.shape[0])
-        c3.metric("Tempo", f"{round(fim-inicio,2)}s")
 
         ranking = df_resultado.groupby(col_cnpj).size().reset_index(name="Qtd")
 
@@ -188,13 +187,13 @@ with aba1:
         st.dataframe(df_resultado, use_container_width=True)
 
 # ================================
-# 🔎 ABA 2 (CONSULTA REAL)
+# 🔎 ABA 2
 # ================================
 with aba2:
 
-    st.subheader("🔎 Consulta automática por CNPJ")
+    st.subheader("🔎 Consulta CNPJ")
 
-    cnpj_input = st.text_input("Digite o CNPJ (somente números)")
+    cnpj_input = st.text_input("Digite o CNPJ")
 
     if cnpj_input:
 
@@ -202,27 +201,24 @@ with aba2:
 
         if len(cnpj) == 14:
 
-            with st.spinner("Buscando dados..."):
-                dados = consultar_cnpj(cnpj)
+            dados = consultar_cnpj(cnpj)
 
             if dados:
 
-                st.success("Empresa encontrada!")
+                st.success("Empresa encontrada")
 
                 col1, col2 = st.columns(2)
 
-                col1.write("🏢 Empresa:", dados["Empresa"])
-                col1.write("🏷 Fantasia:", dados["Fantasia"])
-                col1.write("📞 Telefone:", dados["Telefone"])
+                col1.write(f"🏢 Empresa: {dados.get('Empresa','')}")
+                col1.write(f"🏷 Fantasia: {dados.get('Fantasia','')}")
+                col1.write(f"📞 Telefone: {dados.get('Telefone','')}")
 
-                col2.write("📍 Cidade:", dados["Cidade"])
-                col2.write("🌎 UF:", dados["UF"])
-                col2.write("📧 Email:", dados["Email"])
-
-                st.write("🏭 CNAE:", dados["CNAE"])
+                col2.write(f"📍 Cidade: {dados.get('Cidade','')}")
+                col2.write(f"🌎 UF: {dados.get('UF','')}")
+                col2.write(f"📧 Email: {dados.get('Email','')}")
 
             else:
-                st.error("CNPJ não encontrado ou API indisponível")
+                st.error("❌ CNPJ não encontrado")
 
         else:
-            st.warning("Digite um CNPJ válido com 14 números")
+            st.warning("Digite um CNPJ válido")
