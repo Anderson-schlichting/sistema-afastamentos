@@ -24,7 +24,7 @@ button { padding:12px; background:#22c55e; border:none; border-radius:6px; color
 <h2>🏢 Empresa</h2>
 <div class="grid">
 <input id="empresa" placeholder="Empresa">
-<input id="cnpj" placeholder="CNPJ">
+<input id="cnpj" placeholder="CNPJ" onblur="buscarCNPJ()">
 <input id="rat" placeholder="RAT (%)">
 <input id="folha" placeholder="Folha mensal">
 <input id="ano" placeholder="Ano início">
@@ -57,15 +57,53 @@ button { padding:12px; background:#22c55e; border:none; border-radius:6px; color
 
 <script>
 
+// =============================
+// 🔎 BUSCAR CNPJ AUTOMÁTICO
+// =============================
+async function buscarCNPJ(){
+
+    let cnpj = document.getElementById("cnpj").value;
+
+    cnpj = cnpj.replace(/\D/g,'');
+
+    if(cnpj.length != 14){
+        alert("CNPJ inválido");
+        return;
+    }
+
+    document.getElementById("empresa").value = "Carregando...";
+
+    try{
+        let url = `https://brasilapi.com.br/api/cnpj/v1/${cnpj}`;
+
+        let response = await fetch(url);
+        let data = await response.json();
+
+        if(data.razao_social){
+            document.getElementById("empresa").value = data.razao_social;
+        } else {
+            document.getElementById("empresa").value = "";
+            alert("Empresa não encontrada");
+        }
+
+    } catch(e){
+        document.getElementById("empresa").value = "";
+        alert("Erro ao consultar CNPJ");
+    }
+}
+
+// =============================
+// 📊 CÁLCULO FAP
+// =============================
 let dadosPDF = "";
 
 function calcular(){
 
-let rat = parseFloat(rat.value||0);
-let folha = parseFloat(folha.value||0);
-let ano = parseInt(ano.value||0);
-let b91 = parseInt(b91.value||0);
-let cat = parseInt(cat.value||0);
+let rat = parseFloat(document.getElementById("rat").value||0);
+let folha = parseFloat(document.getElementById("folha").value||0);
+let ano = parseInt(document.getElementById("ano").value||0);
+let b91 = parseInt(document.getElementById("b91").value||0);
+let cat = parseInt(document.getElementById("cat").value||0);
 
 let anos = new Date().getFullYear() - ano;
 
@@ -88,17 +126,20 @@ let risco = "Baixo";
 if(fap>1.2) risco="Médio";
 if(fap>1.5) risco="Alto";
 
-// 🧠 IA SIMPLES
+// 🧠 SUGESTÕES
 let sugestoes = "";
 if(b91>5) sugestoes += "Reduzir afastamentos B91.\n";
 if(cat>3) sugestoes += "Investir em segurança do trabalho.\n";
-if(anos<5) sugestoes += "Empresa ainda em fase inicial.\n";
+if(anos<5) sugestoes += "Empresa recente, histórico reduzido.\n";
 
 dadosPDF = `
+Empresa: ${empresa.value}
+CNPJ: ${cnpj.value}
+
 FAP: ${fap.toFixed(2)}
 RAT Ajustado: ${ratAjustado.toFixed(2)}
 Custo: R$ ${custo.toFixed(2)}
-Economia potencial anual: R$ ${economia.toFixed(2)}
+Economia anual: R$ ${economia.toFixed(2)}
 Risco: ${risco}
 
 Sugestões:
@@ -123,17 +164,18 @@ data:[fap, fapIdeal]
 });
 }
 
+// =============================
 // 📄 PDF
+// =============================
 function gerarPDF(){
 
 const { jsPDF } = window.jspdf;
 let doc = new jsPDF();
 
-// LOGO
 doc.addImage("logo.png", "PNG", 150, 10, 40, 20);
 
 doc.setFontSize(16);
-doc.text("Relatório FAP", 20, 20);
+doc.text("Relatório FAP Empresarial", 20, 20);
 
 doc.setFontSize(10);
 doc.text(dadosPDF, 20, 40);
