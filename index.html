@@ -1,50 +1,134 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Análise empresarial - FAP</title>
-<link rel="stylesheet" href="style.css">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-</head>
-<body>
+<title>Análise FAP</title>
 
-<div class="container" id="relatorio">
-<h1>Análise empresarial - FAP</h1>
+<style>
+body {
+    font-family: Arial;
+    background: #0f172a;
+    color: #fff;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1100px;
+    margin: auto;
+}
+
+.card {
+    background: #1e293b;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+h2 {
+    margin-bottom: 15px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+}
+
+input {
+    padding: 10px;
+    border-radius: 6px;
+    border: none;
+}
+
+button {
+    padding: 12px;
+    border: none;
+    border-radius: 6px;
+    background: #22c55e;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #16a34a;
+}
+
+.resultado {
+    font-size: 18px;
+    margin-top: 10px;
+}
+</style>
+
+</head>
+
+<body>
+<div class="container">
 
 <div class="card">
-<h3>Empresa</h3>
+<h2>🏢 Dados da Empresa</h2>
+
+<div class="grid">
 <input id="cnpj" placeholder="CNPJ">
-<input id="empresa" placeholder="Empresa" readonly>
+<input id="empresa" placeholder="Empresa">
 <input id="cnae" placeholder="CNAE">
 <input id="rat" placeholder="RAT (%)">
 <input id="folha" placeholder="Folha mensal">
-<input id="fapAtual" placeholder="FAP atual">
+<input id="fap" placeholder="FAP atual">
+<input id="ano" placeholder="Ano de início (ex: 2024)">
+</div>
 </div>
 
 <div class="card">
-<h3>Histórico INSS</h3>
-<input type="number" id="b91" placeholder="B91 – Auxílio-doença acidentário">
-<input type="number" id="b92" placeholder="B92 – Invalidez acidentária">
-<input type="number" id="b93" placeholder="B93 – Pensão por morte">
-<input type="number" id="b94" placeholder="B94 – Auxílio-acidente">
-<input type="number" id="cat" placeholder="CATs vinculadas">
+<h2>📊 Histórico INSS</h2>
+
+<div class="grid">
+<input id="b91" placeholder="B91">
+<input id="b92" placeholder="B92">
+<input id="b93" placeholder="B93">
+<input id="b94" placeholder="B94">
+<input id="cat" placeholder="CATs">
+</div>
 </div>
 
 <div class="card">
-<button onclick="calcular()">Analisar</button>
-<button onclick="gerarPDF()">Gerar PDF</button>
-</div>
+<button onclick="calcular()">🚀 Analisar</button>
+<button onclick="gerarPDF()">📄 Gerar PDF</button>
 
-<div class="card">
-<h3>Resultado</h3>
-<div id="resultado"></div>
-<canvas id="grafico"></canvas>
+<div class="resultado" id="resultado"></div>
 </div>
 
 </div>
 
-<script src="script.js"></script>
+<script>
+function calcular() {
+
+    let anoInicio = parseInt(document.getElementById("ano").value);
+    let anoAtual = new Date().getFullYear();
+
+    let tempo = anoAtual - anoInicio;
+
+    let msg = "";
+
+    if (tempo < 5) {
+        msg += "⚠️ Empresa com menos de 5 anos (" + tempo + " anos).<br>";
+    } else {
+        msg += "✅ Empresa com histórico completo.<br>";
+    }
+
+    let b91 = parseInt(document.getElementById("b91").value || 0);
+
+    if (b91 > 5) {
+        msg += "⚠️ Alto índice de afastamentos B91.<br>";
+    }
+
+    document.getElementById("resultado").innerHTML = msg;
+}
+
+function gerarPDF(){
+    alert("PDF gerado (implementar depois)");
+}
+</script>
+
 </body>
 </html>
