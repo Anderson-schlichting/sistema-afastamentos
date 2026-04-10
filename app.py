@@ -72,24 +72,31 @@ CIDADES_SC = [ "ABDON BATISTA","ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA
 "ZORTÉA"]
 
 # ================================
-# 📂 LEITURA (BLINDADA)
+# 📂 LEITURA FORTE CSV
 # ================================
 def carregar_arquivo(file):
     try:
         if file.name.endswith(".csv"):
-            for enc in ["utf-8", "latin1", "ISO-8859-1"]:
-                try:
-                    return pd.read_csv(file, sep=None, engine="python", encoding=enc)
-                except:
-                    continue
+
+            try:
+                return pd.read_csv(file, sep=';', encoding='latin1')
+            except:
+                for enc in ["utf-8", "ISO-8859-1"]:
+                    try:
+                        return pd.read_csv(file, sep=';', encoding=enc)
+                    except:
+                        continue
             return None
+
         else:
-            return pd.read_excel(file)
-    except:
+            return pd.read_excel(file, engine="openpyxl")
+
+    except Exception as e:
+        st.error(f"Erro ao ler arquivo: {e}")
         return None
 
 # ================================
-# 🚀 API
+# 🚀 API CNPJ
 # ================================
 @st.cache_data(ttl=86400)
 def consultar_cnpj(cnpj):
@@ -128,9 +135,28 @@ def aplicar_filtros(df, usar_sc=False, cidade=None):
     return df
 
 # ================================
+# 📊 CÁLCULO FAP
+# ================================
+def calcular_fap(df, col_cnpj):
+    ranking = (
+        df.groupby(col_cnpj)
+        .size()
+        .reset_index(name="Afastamentos")
+    )
+
+    ranking["FAP"] = ranking["Afastamentos"].apply(lambda x:
+        0.5 if x <= 2 else
+        1.0 if x <= 5 else
+        1.5 if x <= 10 else
+        2.0
+    )
+
+    return ranking
+
+# ================================
 # 🖥️ APP
 # ================================
-st.title("📊 Sistema Inteligente")
+st.title("📊 Sistema Inteligente de Empresas + FAP")
 
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta CNPJ"])
 
@@ -145,9 +171,8 @@ with aba1:
 
         df = carregar_arquivo(file)
 
-        # 🔴 CORREÇÃO PRINCIPAL
         if df is None:
-            st.error("❌ Erro ao ler arquivo. Verifique o CSV (separador ou encoding).")
+            st.error("❌ Erro ao ler arquivo CSV")
             st.stop()
 
         df.columns = df.columns.astype(str).str.strip()
@@ -165,25 +190,32 @@ with aba1:
         contagem = df[col_cnpj].value_counts()
         df_resultado = df[df[col_cnpj].isin(contagem[contagem > 1].index)]
 
+        # salva global para aba 2
+        st.session_state["df_resultado"] = df_resultado
+        st.session_state["col_cnpj"] = col_cnpj
+
         # filtros
         usar_sc = st.checkbox("Apenas SC")
         cidade = st.selectbox("Cidade", ["Todas"] + CIDADES_SC)
 
         df_resultado = aplicar_filtros(df_resultado, usar_sc, cidade)
 
-        # =====================
-        # DASHBOARD
-        # =====================
+        # dashboard
         st.subheader("📊 Indicadores")
 
         c1, c2 = st.columns(2)
         c1.metric("Empresas", df_resultado[col_cnpj].nunique())
         c2.metric("Registros", df_resultado.shape[0])
 
-        ranking = df_resultado.groupby(col_cnpj).size().reset_index(name="Qtd")
+        # ranking
+        ranking = calcular_fap(df_resultado, col_cnpj)
 
-        st.bar_chart(ranking.set_index(col_cnpj)["Qtd"].head(10))
+        st.markdown("## 📈 FAP por Empresa")
+        st.dataframe(ranking, use_container_width=True)
 
+        st.bar_chart(ranking.set_index(col_cnpj)["Afastamentos"].head(10))
+
+        st.markdown("## 📋 Dados")
         st.dataframe(df_resultado, use_container_width=True)
 
 # ================================
@@ -191,7 +223,7 @@ with aba1:
 # ================================
 with aba2:
 
-    st.subheader("🔎 Consulta CNPJ")
+    st.subheader("🔎 Consulta CNPJ + FAP")
 
     cnpj_input = st.text_input("Digite o CNPJ")
 
@@ -217,8 +249,37 @@ with aba2:
                 col2.write(f"🌎 UF: {dados.get('UF','')}")
                 col2.write(f"📧 Email: {dados.get('Email','')}")
 
+                # =====================
+                # 🔥 FAP AUTOMÁTICO
+                # =====================
+                if "df_resultado" in st.session_state:
+
+                    df_resultado = st.session_state["df_resultado"]
+                    col_cnpj = st.session_state["col_cnpj"]
+
+                    dados_empresa = df_resultado[df_resultado[col_cnpj] == cnpj]
+
+                    if not dados_empresa.empty:
+
+                        total = len(dados_empresa)
+
+                        if total <= 2:
+                            fap = 0.5
+                        elif total <= 5:
+                            fap = 1.0
+                        elif total <= 10:
+                            fap = 1.5
+                        else:
+                            fap = 2.0
+
+                        st.markdown("### 📊 FAP Estimado")
+                        st.success(f"Afastamentos: {total} | FAP: {fap}")
+
+                    else:
+                        st.info("Empresa não encontrada na base carregada")
+
             else:
                 st.error("❌ CNPJ não encontrado")
 
         else:
-            st.warning("Digite um CNPJ válido")
+            st.warning("Digite um CNPJ válido com 14 números")
