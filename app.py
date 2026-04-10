@@ -69,223 +69,160 @@ CIDADES_SC = [ "ABDON BATISTA","ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA
 "TURVO","UNIÃO DO OESTE","URUBICI","URUPEMA","URUSSANGA",
 "VARGEÃO","VARGEM","VARGEM BONITA","VIDAL RAMOS","VIDEIRA",
 "VITOR MEIRELES","WITMARSUM","XANXERÊ","XAVANTINA","XAXIM",
-"ZORTÉA"
-]
+"ZORTÉA"]
 
 # ================================
-# 🚀 API OTIMIZADA (CACHE)
+# 📂 LEITURA CSV (CORRIGIDA)
+# ================================
+def carregar_arquivo(file):
+    if file.name.endswith(".csv"):
+        for enc in ["utf-8", "latin1", "ISO-8859-1"]:
+            try:
+                return pd.read_csv(file, sep=None, engine="python", encoding=enc)
+            except:
+                continue
+        st.error("Erro ao ler CSV")
+        return None
+    else:
+        return pd.read_excel(file, engine="openpyxl")
+
+# ================================
+# 🚀 API CONSULTA CNPJ
 # ================================
 @st.cache_data(ttl=86400)
-def buscar_empresa(cnpj):
+def consultar_cnpj(cnpj):
     try:
         url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
         r = requests.get(url, timeout=3)
 
         if r.status_code == 200:
-            data = r.json()
-            return (
-                data.get("razao_social", "Não encontrado"),
-                data.get("ddd_telefone_1", ""),
-                data.get("municipio", ""),
-                data.get("uf", "")
-            )
+            d = r.json()
+            return {
+                "Empresa": d.get("razao_social",""),
+                "Fantasia": d.get("nome_fantasia",""),
+                "Telefone": d.get("ddd_telefone_1",""),
+                "Email": d.get("email",""),
+                "Cidade": d.get("municipio",""),
+                "UF": d.get("uf",""),
+                "CNAE": d.get("cnae_fiscal_descricao",""),
+            }
     except:
         pass
 
-    return "Não encontrado", "", "", ""
-
-# ================================
-# 📂 LEITURA
-# ================================
-def carregar_arquivo(file):
-    if file.name.endswith(".csv"):
-        return pd.read_csv(file, sep=None, engine="python")
-    else:
-        return pd.read_excel(file, engine="openpyxl")
+    return {}
 
 # ================================
 # 🔍 FILTROS
 # ================================
-def filtrar_sc(df):
-    for col in ["Estado", "UF", "uf"]:
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.upper()
-            return df[df[col].isin(["SC", "SANTA CATARINA"])]
-    return df
-
-
 def aplicar_filtros(df, usar_sc=False, cidade=None):
-    df_filtrado = df.copy()
+    df = df.copy()
 
     if usar_sc:
-        df_filtrado = filtrar_sc(df_filtrado)
+        if "Estado" in df.columns:
+            df = df[df["Estado"].str.upper().str.contains("SANTA CATARINA|SC", na=False)]
 
-    if cidade and cidade != "Todas":
-        if "Cidade" in df_filtrado.columns:
-            df_filtrado["Cidade"] = df_filtrado["Cidade"].astype(str).str.upper()
-            df_filtrado = df_filtrado[df_filtrado["Cidade"] == cidade]
+    if cidade and cidade != "Todas" and "Cidade" in df.columns:
+        df["Cidade"] = df["Cidade"].str.upper()
+        df = df[df["Cidade"] == cidade]
 
-    return df_filtrado
+    return df
 
 # ================================
-# 🖥️ UI
+# 🖥️ APP
 # ================================
-st.title("📊 Sistema Inteligente de Afastamentos + FAP")
+st.title("📊 Sistema Inteligente de Empresas")
 
-aba1, aba2 = st.tabs(["📊 CNPJ Repetido", "📈 Análise FAP"])
+aba1, aba2 = st.tabs(["📊 Análise de Empresas", "🔎 Consulta CNPJ"])
 
 # ================================
 # 📊 ABA 1
 # ================================
 with aba1:
 
-    st.subheader("📊 Análise Inteligente de Empresas")
+    file = st.file_uploader("Envie Excel ou CSV")
 
-    file = st.file_uploader("Envie Excel ou CSV", type=["xlsx","csv"])
+    if file and st.button("🚀 Processar"):
 
-    if file:
+        inicio = time.time()
 
-        if st.button("🚀 Processar"):
+        df = carregar_arquivo(file)
+        df.columns = df.columns.str.strip()
 
-            inicio = time.time()
+        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
-            df = carregar_arquivo(file)
-            df.columns = df.columns.str.strip()
+        df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r'\D','',regex=True).str.zfill(14)
 
-            col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
+        contagem = df[col_cnpj].value_counts()
+        df_resultado = df[df[col_cnpj].isin(contagem[contagem > 1].index)]
 
-            df[col_cnpj] = (
-                df[col_cnpj]
-                .astype(str)
-                .str.replace(r'\D', '', regex=True)
-                .str.zfill(14)
-            )
+        # filtros
+        usar_sc = st.sidebar.checkbox("Apenas SC")
+        cidade = st.sidebar.selectbox("Cidade", ["Todas"] + sorted(CIDADES_SC))
 
-            contagem = df[col_cnpj].value_counts()
-            repetidos = contagem[contagem > 1]
+        df_resultado = aplicar_filtros(df_resultado, usar_sc, cidade)
 
-            df_resultado = df[df[col_cnpj].isin(repetidos.index)]
+        # API rápida
+        mapa = {}
+        for cnpj in df_resultado[col_cnpj].unique()[:50]:
+            dados = consultar_cnpj(cnpj)
+            mapa[cnpj] = dados.get("Empresa","")
 
-            # ====================
-            # 🔍 FILTROS UI
-            # ====================
-            st.sidebar.header("🔍 Filtros Inteligentes")
+        df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa)
 
-            usar_sc = st.sidebar.checkbox("Apenas Santa Catarina")
+        fim = time.time()
 
-            cidade = st.sidebar.selectbox(
-                "Filtrar por cidade",
-                ["Todas"] + sorted(CIDADES_SC)
-            )
+        # ============================
+        # DASHBOARD
+        # ============================
+        st.markdown("## 📊 Dashboard")
 
-            # aplica filtros
-            df_resultado = aplicar_filtros(df_resultado, usar_sc, cidade)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Empresas", df_resultado[col_cnpj].nunique())
+        c2.metric("Registros", df_resultado.shape[0])
+        c3.metric("Tempo", f"{round(fim-inicio,2)}s")
 
-            # ====================
-            # 🚀 CONSULTA RÁPIDA
-            # ====================
-            cnpjs_unicos = df_resultado[col_cnpj].unique()[:50]
+        ranking = df_resultado.groupby(col_cnpj).size().reset_index(name="Qtd")
 
-            mapa_nome = {}
-            mapa_tel = {}
+        st.bar_chart(ranking.set_index(col_cnpj)["Qtd"].head(10))
 
-            for cnpj in cnpjs_unicos:
-                nome, tel, cidade_api, uf_api = buscar_empresa(cnpj)
-
-                mapa_nome[cnpj] = nome
-                mapa_tel[cnpj] = tel
-
-                # preenche cidade se não tiver
-                if "Cidade" not in df_resultado.columns and cidade_api:
-                    df_resultado.loc[df_resultado[col_cnpj] == cnpj, "Cidade"] = cidade_api
-
-            df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa_nome)
-            df_resultado["Telefone"] = df_resultado[col_cnpj].map(mapa_tel)
-
-            fim = time.time()
-
-            # ====================
-            # 📊 DASHBOARD
-            # ====================
-            col1, col2, col3, col4 = st.columns(4)
-
-            col1.metric("⏱ Tempo", f"{round(fim-inicio,2)}s")
-            col2.metric("🏢 Empresas únicas", df_resultado[col_cnpj].nunique())
-            col3.metric("📄 Registros", df_resultado.shape[0])
-            col4.metric(
-                "📍 Cidades",
-                df_resultado["Cidade"].nunique() if "Cidade" in df_resultado else 0
-            )
-
-            # ====================
-            # 🥇 RANKING
-            # ====================
-            ranking = (
-                df_resultado.groupby([col_cnpj,"Empresa","Telefone"])
-                .size()
-                .reset_index(name="Afastamentos")
-                .sort_values(by="Afastamentos", ascending=False)
-            )
-
-            st.markdown("## 🥇 Ranking de Empresas")
-            st.dataframe(ranking, use_container_width=True)
-
-            # ====================
-            # 📊 GRÁFICO
-            # ====================
-            st.markdown("## 📊 Top 10 Empresas")
-            top10 = ranking.head(10).set_index("Empresa")
-            st.bar_chart(top10["Afastamentos"])
-
-            # ====================
-            # ⚠️ ALERTAS
-            # ====================
-            criticas = ranking[ranking["Afastamentos"] >= 5]
-
-            if not criticas.empty:
-                st.markdown("## ⚠️ Empresas com Alto Risco")
-
-                for _, row in criticas.iterrows():
-                    st.warning(
-                        f"{row['Empresa']} | CNPJ: {row[col_cnpj]} | "
-                        f"Afastamentos: {row['Afastamentos']}"
-                    )
-
-            # ====================
-            # 📋 DADOS
-            # ====================
-            st.markdown("## 📋 Dados Detalhados")
-            st.dataframe(df_resultado, use_container_width=True)
-
-            # ====================
-            # 📥 DOWNLOAD
-            # ====================
-            output = BytesIO()
-
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_resultado.to_excel(writer, index=False, sheet_name="Dados")
-                ranking.to_excel(writer, index=False, sheet_name="Ranking")
-
-            output.seek(0)
-
-            st.download_button(
-                "📥 Baixar relatório completo",
-                output,
-                "relatorio_completo.xlsx"
-            )
+        st.dataframe(df_resultado, use_container_width=True)
 
 # ================================
-# 📈 ABA 2
+# 🔎 ABA 2 (CONSULTA REAL)
 # ================================
 with aba2:
 
-    st.subheader("📈 Análise Empresarial - FAP")
+    st.subheader("🔎 Consulta automática por CNPJ")
 
-    try:
-        with open("index.html", "r", encoding="utf-8") as f:
-            html = f.read()
+    cnpj_input = st.text_input("Digite o CNPJ (somente números)")
 
-        components.html(html, height=900, scrolling=True)
+    if cnpj_input:
 
-    except:
-        st.error("❌ index.html não encontrado")
+        cnpj = ''.join(filter(str.isdigit, cnpj_input)).zfill(14)
+
+        if len(cnpj) == 14:
+
+            with st.spinner("Buscando dados..."):
+                dados = consultar_cnpj(cnpj)
+
+            if dados:
+
+                st.success("Empresa encontrada!")
+
+                col1, col2 = st.columns(2)
+
+                col1.write("🏢 Empresa:", dados["Empresa"])
+                col1.write("🏷 Fantasia:", dados["Fantasia"])
+                col1.write("📞 Telefone:", dados["Telefone"])
+
+                col2.write("📍 Cidade:", dados["Cidade"])
+                col2.write("🌎 UF:", dados["UF"])
+                col2.write("📧 Email:", dados["Email"])
+
+                st.write("🏭 CNAE:", dados["CNAE"])
+
+            else:
+                st.error("CNPJ não encontrado ou API indisponível")
+
+        else:
+            st.warning("Digite um CNPJ válido com 14 números")
