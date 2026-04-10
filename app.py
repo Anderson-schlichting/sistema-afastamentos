@@ -19,15 +19,17 @@ def carregar_arquivo(file):
         return pd.read_excel(file, engine="openpyxl")
 
 # ================================
-# 🔎 CONSULTA CNPJ
+# 🔎 CONSULTA EMPRESA
 # ================================
 @st.cache_data(ttl=3600)
 def buscar_empresa(cnpj):
     try:
-        url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
-        r = requests.get(url, timeout=3)
-        nome = r.json().get("razao_social", "")
+        # Nome (BrasilAPI)
+        url1 = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
+        r1 = requests.get(url1, timeout=3)
+        nome = r1.json().get("razao_social", "")
 
+        # Telefone + sócios
         url2 = f"https://receitaws.com.br/v1/cnpj/{cnpj}"
         r2 = requests.get(url2, timeout=5)
         data = r2.json()
@@ -53,7 +55,7 @@ aba1, aba2 = st.tabs(["📊 CNPJ Repetido", "📈 Análise FAP"])
 # ================================
 with aba1:
 
-    st.subheader("📊 Análise de Empresas")
+    st.subheader("📊 Análise de Empresas (Santa Catarina)")
 
     file = st.file_uploader("Envie Excel ou CSV", type=["xlsx","csv"])
 
@@ -64,27 +66,20 @@ with aba1:
             df = carregar_arquivo(file)
             df.columns = df.columns.str.strip()
 
-            st.write("📋 Colunas detectadas:", list(df.columns))
+            # ====================
+            # COLUNAS FIXAS (SEU PADRÃO)
+            # ====================
+            col_cnpj = "CNPJ/CEI Empregador"
+            col_cidade = "Munic Empr"
+            col_uf = "UF Munic. Empregador"
 
             # ====================
-            # 🔎 DETECTA CNPJ (INTELIGENTE)
+            # FILTRO SC
             # ====================
-            col_cnpj = next(
-                (c for c in df.columns if any(x in c.upper() for x in ["CNPJ","CEI","EMPREGADOR"])),
-                None
-            )
-
-            if not col_cnpj:
-                st.error("❌ Não encontrei coluna de CNPJ")
-                st.stop()
-
-            # ====================
-            # 🏙️ DETECTA CIDADE
-            # ====================
-            col_cidade = next(
-                (c for c in df.columns if "MUNIC" in c.upper()),
-                None
-            )
+            if col_uf in df.columns:
+                df = df[df[col_uf].astype(str).str.upper().str.contains("SC")]
+            else:
+                st.warning("⚠️ Coluna de UF não encontrada - filtrando apenas por cidade")
 
             # ====================
             # LIMPA CNPJ
@@ -97,17 +92,17 @@ with aba1:
             )
 
             # ====================
-            # REPETIDOS
+            # CNPJs REPETIDOS
             # ====================
             contagem = df[col_cnpj].value_counts()
             repetidos = contagem[contagem > 1]
 
-            df_resultado = df[df[col_cnpj].isin(repetidos.index)]
+            df = df[df[col_cnpj].isin(repetidos.index)]
 
             # ====================
             # CONSULTA EMPRESAS
             # ====================
-            cnpjs = df_resultado[col_cnpj].dropna().unique()[:20]
+            cnpjs = df[col_cnpj].dropna().unique()[:20]
 
             mapa_nome = {}
             mapa_tel = {}
@@ -123,12 +118,11 @@ with aba1:
                 mapa_socios[cnpj] = socios
 
                 progress.progress((i+1)/len(cnpjs))
-
                 time.sleep(0.2)
 
-            df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa_nome)
-            df_resultado["Telefone"] = df_resultado[col_cnpj].map(mapa_tel)
-            df_resultado["Sócios"] = df_resultado[col_cnpj].map(mapa_socios)
+            df["Empresa"] = df[col_cnpj].map(mapa_nome)
+            df["Telefone"] = df[col_cnpj].map(mapa_tel)
+            df["Sócios"] = df[col_cnpj].map(mapa_socios)
 
             # ====================
             # DASHBOARD
@@ -136,7 +130,7 @@ with aba1:
             st.markdown("## 🥇 Ranking de Empresas")
 
             ranking = (
-                df_resultado.groupby(["Empresa","Telefone","Sócios"])
+                df.groupby(["Empresa","Telefone","Sócios"])
                 .size()
                 .reset_index(name="Afastamentos")
                 .sort_values(by="Afastamentos", ascending=False)
@@ -153,16 +147,16 @@ with aba1:
             # ====================
             # RANKING POR CIDADE
             # ====================
-            if col_cidade:
+            if col_cidade in df.columns:
                 st.markdown("## 🏙️ Ranking por Cidade")
-                ranking_cidade = df_resultado.groupby(col_cidade).size().reset_index(name="Afastamentos")
+                ranking_cidade = df.groupby(col_cidade).size().reset_index(name="Afastamentos")
                 st.bar_chart(ranking_cidade.set_index(col_cidade))
 
             # ====================
             # DADOS
             # ====================
             st.markdown("## 📋 Dados Detalhados")
-            st.dataframe(df_resultado, use_container_width=True)
+            st.dataframe(df, use_container_width=True)
 
             # ====================
             # DOWNLOAD
@@ -170,15 +164,15 @@ with aba1:
             output = BytesIO()
 
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_resultado.to_excel(writer, index=False)
+                df.to_excel(writer, index=False, sheet_name="Dados")
                 ranking.to_excel(writer, index=False, sheet_name="Ranking")
 
             output.seek(0)
 
             st.download_button(
-                "📥 Baixar relatório",
+                "📥 Baixar relatório completo",
                 output,
-                "relatorio.xlsx"
+                "relatorio_sc.xlsx"
             )
 
 # ================================
@@ -195,4 +189,4 @@ with aba2:
         components.html(html, height=900, scrolling=True)
 
     except:
-        st.warning("⚠️ Arquivo index.html não encontrado")
+        st.warning("⚠️ index.html não encontrado")
