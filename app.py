@@ -10,17 +10,35 @@ st.set_page_config(layout="wide")
 st.title("📊 Sistema Inteligente de Afastamentos + FAP")
 
 # ================================
-# 🔎 CONSULTA CNPJ
+# 🔎 CONSULTA COMPLETA (ReceitaWS)
 # ================================
 @st.cache_data
 def buscar_empresa(cnpj):
     try:
-        url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
-        r = requests.get(url, timeout=3)
-        if r.status_code == 200:
-            return r.json().get("razao_social", "")
+        url = f"https://receitaws.com.br/v1/cnpj/{cnpj}"
+        r = requests.get(url, timeout=5)
+        data = r.json()
+
+        nome = data.get("nome", "")
+        telefone = data.get("telefone", "")
+
+        socios = ""
+        if "qsa" in data:
+            socios = ", ".join([s["nome"] for s in data["qsa"][:3]])
+
+        return nome, telefone, socios
+
     except:
-        return "Não encontrado"
+        return "Não encontrado", "", ""
+
+# ================================
+# 📂 LEITURA AUTOMÁTICA
+# ================================
+def carregar_arquivo(file):
+    if file.name.endswith(".csv"):
+        return pd.read_csv(file, sep=None, engine="python")
+    else:
+        return pd.read_excel(file, engine="openpyxl")
 
 # ================================
 # ABAS
@@ -34,147 +52,142 @@ with aba1:
 
     st.subheader("📊 Análise Inteligente de Empresas")
 
-    file = st.file_uploader("Envie a planilha Excel", type=["xlsx"])
+    file = st.file_uploader("Envie Excel ou CSV", type=["xlsx","csv"])
 
     if file:
 
-        if st.button("🚀 Processar Planilha"):
+        if st.button("🚀 Processar"):
 
             inicio = time.time()
 
-            progress = st.progress(0)
-            status = st.empty()
+            df = carregar_arquivo(file)
+            df.columns = df.columns.str.strip()
 
-            try:
-                progress.progress(10)
-                df = pd.read_excel(file, engine="openpyxl")
-                df.columns = df.columns.str.strip()
+            # Detecta CNPJ
+            col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
-                col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
+            # Corrige CNPJ
+            df[col_cnpj] = (
+                df[col_cnpj]
+                .astype(str)
+                .str.replace(r'\D', '', regex=True)
+                .str.zfill(14)
+            )
 
-                df[col_cnpj] = (
-                    df[col_cnpj]
-                    .astype(str)
-                    .str.replace(r'\D', '', regex=True)
-                    .str.zfill(14)
-                )
+            # Repetidos
+            contagem = df[col_cnpj].value_counts()
+            repetidos = contagem[contagem > 1]
 
-                # ====================
-                # 🔍 FILTROS
-                # ====================
-                st.sidebar.header("🔍 Filtros")
+            df_resultado = df[df[col_cnpj].isin(repetidos.index)]
 
-                if "Cidade" in df.columns:
-                    cidade = st.sidebar.selectbox("Cidade", ["Todas"] + list(df["Cidade"].dropna().unique()))
-                    if cidade != "Todas":
-                        df = df[df["Cidade"] == cidade]
+            # ====================
+            # 🔍 FILTROS
+            # ====================
+            st.sidebar.header("Filtros")
 
-                if "Data" in df.columns:
-                    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
-                    data_ini = st.sidebar.date_input("Data inicial", df["Data"].min())
-                    data_fim = st.sidebar.date_input("Data final", df["Data"].max())
-                    df = df[(df["Data"] >= pd.to_datetime(data_ini)) & (df["Data"] <= pd.to_datetime(data_fim))]
+            if "Cidade" in df.columns:
+                cidade = st.sidebar.selectbox("Cidade", ["Todas"] + list(df["Cidade"].dropna().unique()))
+                if cidade != "Todas":
+                    df_resultado = df_resultado[df_resultado["Cidade"] == cidade]
 
-                progress.progress(40)
+            # ====================
+            # 🚀 CONSULTA OTIMIZADA
+            # ====================
+            cnpjs_unicos = df_resultado[col_cnpj].unique()[:30]
 
-                contagem = df[col_cnpj].value_counts()
-                repetidos = contagem[contagem > 1]
+            mapa_nome = {}
+            mapa_tel = {}
+            mapa_socios = {}
 
-                df_resultado = df[df[col_cnpj].isin(repetidos.index)]
+            for cnpj in cnpjs_unicos:
+                nome, tel, socios = buscar_empresa(cnpj)
 
-                # Consulta otimizada
-                cnpjs_unicos = df_resultado[col_cnpj].unique()[:100]
+                mapa_nome[cnpj] = nome
+                mapa_tel[cnpj] = tel
+                mapa_socios[cnpj] = socios
 
-                mapa = {}
-                for cnpj in cnpjs_unicos:
-                    mapa[cnpj] = buscar_empresa(cnpj)
+                time.sleep(0.3)
 
-                df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa)
+            df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa_nome)
+            df_resultado["Telefone"] = df_resultado[col_cnpj].map(mapa_tel)
+            df_resultado["Sócios"] = df_resultado[col_cnpj].map(mapa_socios)
 
-                progress.progress(70)
+            fim = time.time()
 
-                fim = time.time()
+            # ====================
+            # DASHBOARD
+            # ====================
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Tempo", f"{round(fim-inicio,2)}s")
+            col2.metric("Empresas", df_resultado[col_cnpj].nunique())
+            col3.metric("Registros", df_resultado.shape[0])
 
-                progress.progress(100)
+            # ====================
+            # RANKING
+            # ====================
+            ranking = (
+                df_resultado.groupby([col_cnpj,"Empresa","Telefone","Sócios"])
+                .size()
+                .reset_index(name="Afastamentos")
+                .sort_values(by="Afastamentos", ascending=False)
+            )
 
-                # ====================
-                # 📊 DASHBOARD
-                # ====================
-                col1, col2, col3 = st.columns(3)
-                col1.metric("⏱ Tempo", f"{round(fim-inicio,2)}s")
-                col2.metric("📊 Empresas únicas", df_resultado[col_cnpj].nunique())
-                col3.metric("📁 Registros", df_resultado.shape[0])
+            st.markdown("## Ranking")
+            st.dataframe(ranking, use_container_width=True)
 
-                # ====================
-                # 🥇 RANKING
-                # ====================
-                ranking = (
-                    df_resultado.groupby([col_cnpj, "Empresa"])
-                    .size()
-                    .reset_index(name="Qtd Afastamentos")
-                    .sort_values(by="Qtd Afastamentos", ascending=False)
-                )
+            # ====================
+            # GRÁFICO
+            # ====================
+            st.markdown("## Top 10 Empresas")
+            top10 = ranking.head(10).set_index("Empresa")
+            st.bar_chart(top10["Afastamentos"])
 
-                st.markdown("## 🥇 Ranking de Empresas")
-                st.dataframe(ranking, use_container_width=True, hide_index=True)
+            # ====================
+            # ALTO RISCO
+            # ====================
+            criticas = ranking[ranking["Afastamentos"] >= 5]
 
-                # ====================
-                # 📊 GRÁFICO
-                # ====================
-                st.markdown("## 📊 Top 10 Empresas")
+            if not criticas.empty:
+                st.markdown("## ⚠️ Alto Risco")
 
-                top10 = ranking.head(10).set_index("Empresa")
+                for _, row in criticas.iterrows():
+                    st.markdown(f"""
+                    <div style="background:#7f1d1d;padding:15px;border-radius:10px;margin-bottom:10px;">
+                    <b>{row['Empresa']}</b><br>
+                    CNPJ: {row[col_cnpj]}<br>
+                    Telefone: {row['Telefone']}<br>
+                    Sócios: {row['Sócios']}<br>
+                    Afastamentos: {row['Afastamentos']}
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                st.bar_chart(top10["Qtd Afastamentos"])
+            # ====================
+            # DADOS
+            # ====================
+            st.markdown("## Dados Detalhados")
+            st.dataframe(df_resultado, use_container_width=True)
 
-                # ====================
-                # ⚠️ RISCO
-                # ====================
-                criticas = ranking[ranking["Qtd Afastamentos"] >= 5]
+            # ====================
+            # DOWNLOAD
+            # ====================
+            output = BytesIO()
 
-                if not criticas.empty:
-                    st.markdown("## ⚠️ Alto Risco")
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_resultado.to_excel(writer, index=False)
+                ranking.to_excel(writer, index=False, sheet_name="Ranking")
 
-                    for _, row in criticas.iterrows():
-                        st.markdown(f"""
-                        <div style="background:#7f1d1d;padding:15px;border-radius:10px;margin-bottom:10px;">
-                        <b>{row['Empresa']}</b><br>
-                        CNPJ: {row[col_cnpj]}<br>
-                        Afastamentos: {row['Qtd Afastamentos']}
-                        </div>
-                        """, unsafe_allow_html=True)
+            output.seek(0)
 
-                # ====================
-                # 📋 DETALHADO
-                # ====================
-                st.markdown("## 📋 Dados Detalhados")
-                st.dataframe(df_resultado, use_container_width=True)
-
-                # ====================
-                # 📥 DOWNLOAD
-                # ====================
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    df_resultado.to_excel(writer, index=False)
-                    ranking.to_excel(writer, index=False, sheet_name='Ranking')
-
-                output.seek(0)
-
-                st.download_button(
-                    "📥 Baixar relatório",
-                    output,
-                    "relatorio.xlsx"
-                )
-
-            except Exception as e:
-                st.error(f"Erro: {e}")
+            st.download_button(
+                "📥 Baixar relatório",
+                output,
+                "relatorio.xlsx"
+            )
 
 # ================================
-# 📈 ABA 2
+# 📈 ABA 2 (FAP)
 # ================================
 with aba2:
-
-    st.subheader("📈 Análise Empresarial - FAP")
 
     try:
         with open("index.html", "r", encoding="utf-8") as f:
@@ -183,4 +196,4 @@ with aba2:
         components.html(html, height=900, scrolling=True)
 
     except:
-        st.error("❌ Arquivo index.html não encontrado.")
+        st.error("index.html não encontrado")
