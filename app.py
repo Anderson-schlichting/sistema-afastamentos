@@ -1,5 +1,30 @@
+import streamlit as st
+import pandas as pd
+import requests
 import time
+import streamlit.components.v1 as components
 
+st.set_page_config(layout="wide")
+
+st.title("📊 Sistema Inteligente de Afastamentos + FAP")
+
+# ===== FUNÇÃO CONSULTA CNPJ =====
+@st.cache_data
+def buscar_empresa(cnpj):
+    try:
+        url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
+        r = requests.get(url, timeout=5)
+        if r.status_code == 200:
+            return r.json().get("razao_social", "")
+    except:
+        return ""
+
+# ===== CRIA AS ABAS =====
+aba1, aba2 = st.tabs(["📊 CNPJ Repetido", "📈 Análise FAP"])
+
+# ================================
+# 📊 ABA 1
+# ================================
 with aba1:
 
     st.subheader("📊 Identificação de Empresas com Múltiplos Afastamentos")
@@ -53,10 +78,8 @@ with aba1:
                 progress.progress(90)
                 status.text("📊 Gerando estatísticas...")
 
-                # 📊 Empresas únicas
                 total_empresas = df_resultado[col_cnpj].nunique()
 
-                # 🥇 Ranking
                 ranking = (
                     df_resultado[col_cnpj]
                     .value_counts()
@@ -64,17 +87,12 @@ with aba1:
                 )
                 ranking.columns = ["CNPJ", "Qtd Afastamentos"]
 
-                # ⚠️ ALERTA
                 criticas = ranking[ranking["Qtd Afastamentos"] >= 5]
 
                 fim = time.time()
 
                 progress.progress(100)
                 status.text("✅ Finalizado!")
-
-                # ========================
-                # 📊 DASHBOARD
-                # ========================
 
                 col1, col2, col3 = st.columns(3)
 
@@ -105,3 +123,19 @@ with aba1:
 
             except Exception as e:
                 st.error(f"Erro: {e}")
+
+# ================================
+# 📈 ABA 2
+# ================================
+with aba2:
+
+    st.subheader("📈 Análise Empresarial - FAP")
+
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            html_code = f.read()
+
+        components.html(html_code, height=900, scrolling=True)
+
+    except:
+        st.warning("⚠️ Arquivo index.html não encontrado.")
