@@ -7,45 +7,95 @@ import streamlit.components.v1 as components
 
 st.set_page_config(layout="wide")
 
-st.title("📊 Sistema Inteligente de Afastamentos + FAP")
+# ================================
+# 📍 LISTA DE CIDADES SC
+# ================================
+CIDADES_SC = [ "ABDON BATISTA","ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA DOCE","ÁGUAS DE CHAPECÓ",
+"ÁGUAS FRIAS","ÁGUAS MORNAS","ALFREDO WAGNER","ALTO BELA VISTA","ANCHIETA","ANGELINA",
+"ANITA GARIBALDI","ANITÁPOLIS","ANTÔNIO CARLOS","APIÚNA","ARABUTÃ","ARAQUARI","ARARANGUÁ",
+"ARMAZÉM","ARROIO TRINTA","ARVOREDO","ASCURRA","ATALANTA","AURORA","BALNEÁRIO ARROIO DO SILVA",
+"BALNEÁRIO BARRA DO SUL","BALNEÁRIO CAMBORIÚ","BALNEÁRIO GAIVOTA","BANDEIRANTE","BARRA BONITA",
+"BARRA VELHA","BELA VISTA DO TOLDO","BELMONTE","BENEDITO NOVO","BIGUAÇU","BLUMENAU","BOCAINA DO SUL",
+"BOMBINHAS","BOM JARDIM DA SERRA","BOM JESUS","BOM JESUS DO OESTE","BOM RETIRO","BOMBINHAS",
+"BOTUVERÁ","BRAÇO DO NORTE","BRAÇO DO TROMBUDO","BRUNÓPOLIS","BRUSQUE","CAÇADOR","CAIBI",
+"CALMON","CAMBORIÚ","CAMPO ALEGRE","CAMPO BELO DO SUL","CAMPO ERÊ","CAMPOS NOVOS",
+"CANELINHA","CANOINHAS","CAPÃO ALTO","CAPINZAL","CAPIVARI DE BAIXO","CATANDUVAS",
+"CAXAMBU DO SUL","CELSO RAMOS","CERRO NEGRO","CHAPADÃO DO LAGEADO","CHAPECÓ",
+"COCAL DO SUL","CONCÓRDIA","CORDILHEIRA ALTA","CORONEL FREITAS","CORONEL MARTINS",
+"CORREIA PINTO","CORUPÁ","CRICIÚMA","CUNHA PORÃ","CUNHATAÍ","CURITIBANOS",
+"DESCANSO","DIONÍSIO CERQUEIRA","DONA EMMA","DOUTOR PEDRINHO","ENTRE RIOS",
+"ERMO","ERVAL VELHO","FAXINAL DOS GUEDES","FLOR DO SERTÃO","FLORIANÓPOLIS",
+"FORMOSA DO SUL","FORQUILHINHA","FRAIBURGO","FREI ROGÉRIO","GALVÃO",
+"GAROPABA","GARUVA","GASPAR","GOVERNADOR CELSO RAMOS","GRÃO PARÁ",
+"GRAVATAL","GUABIRUBA","GUARACIABA","GUARAMIRIM","GUARUJÁ DO SUL",
+"GUATAMBÚ","HERVAL D'OESTE","IBIAM","IBICARÉ","IBIRAMA","IÇARA",
+"ILHOTA","IMARUÍ","IMBITUBA","IMBUIA","INDAIAL","IOMERÊ","IPIRA",
+"IPORÃ DO OESTE","IPUAÇU","IPUMIRIM","IRACEMINHA","IRANI","IRATI",
+"IRINEÓPOLIS","ITÁ","ITAIAL","ITAJAÍ","ITAPEMA","ITAPIRANGA","ITAPOÁ",
+"ITUPORANGA","JABORÁ","JACINTO MACHADO","JAGUARUNA","JARAGUÁ DO SUL",
+"JARDINÓPOLIS","JOAÇABA","JOINVILLE","JOSÉ BOITEUX","JUPIÁ",
+"LACERDÓPOLIS","LAGES","LAGUNA","LAURENTINO","LAURO MÜLLER",
+"LEBON RÉGIS","LEOBERTO LEAL","LINDÓIA DO SUL","LONTRAS","LUIZ ALVES",
+"LUZERNA","MACIEIRA","MAFRA","MAJOR GERCINO","MAJOR VIEIRA",
+"MARACAJÁ","MARAVILHA","MAREMA","MASSARANDUBA","MATOS COSTA",
+"MELEIRO","MIRIM DOCE","MODELO","MONDAÍ","MONTE CARLO",
+"MONTE CASTELO","MORRO DA FUMAÇA","MORRO GRANDE","NAVEGANTES",
+"NOVA ERECHIM","NOVA ITABERABA","NOVA TRENTO","NOVA VENEZA",
+"NOVO HORIZONTE","ORLEANS","OTACÍLIO COSTA","OURO","OURO VERDE",
+"PAIAL","PAINEL","PALHOÇA","PALMA SOLA","PALMEIRA","PALMITOS",
+"PAPANDUVA","PARAÍSO","PASSO DE TORRES","PASSOS MAIA","PAULO LOPES",
+"PEDRAS GRANDES","PENHA","PERITIBA","PESCARIA BRAVA","PETROLÂNDIA",
+"PINHALZINHO","PINHEIRO PRETO","PIRATUBA","PLANALTO ALEGRE","POMERODE",
+"PONTE ALTA","PONTE ALTA DO NORTE","PONTE SERRADA","PORTO BELO",
+"PORTO UNIÃO","POUSO REDONDO","PRAIA GRANDE","PRESIDENTE CASTELLO BRANCO",
+"PRESIDENTE GETÚLIO","PRESIDENTE NEREU","PRINCESA","QUILOMBO",
+"RANCHO QUEIMADO","RIO DAS ANTAS","RIO DO CAMPO","RIO DO OESTE",
+"RIO DO SUL","RIO DOS CEDROS","RIO FORTUNA","RIO NEGRINHO",
+"RIO RUFINO","RIQUEZA","RODEIO","ROMELÂNDIA","SALETE",
+"SALTINHO","SALTO VELOSO","SANGÃO","SANTA CECÍLIA","SANTA HELENA",
+"SANTA ROSA DE LIMA","SANTA ROSA DO SUL","SANTA TEREZINHA",
+"SANTA TEREZINHA DO PROGRESSO","SANTIAGO DO SUL","SANTO AMARO DA IMPERATRIZ",
+"SÃO BENTO DO SUL","SÃO BERNARDINO","SÃO BONIFÁCIO","SÃO CARLOS",
+"SÃO CRISTÓVÃO DO SUL","SÃO DOMINGOS","SÃO FRANCISCO DO SUL",
+"SÃO JOÃO BATISTA","SÃO JOÃO DO ITAPERIÚ","SÃO JOÃO DO OESTE",
+"SÃO JOÃO DO SUL","SÃO JOAQUIM","SÃO JOSÉ","SÃO JOSÉ DO CEDRO",
+"SÃO JOSÉ DO CERRITO","SÃO LOURENÇO DO OESTE","SÃO LUDGERO",
+"SÃO MARTINHO","SÃO MIGUEL DA BOA VISTA","SÃO MIGUEL DO OESTE",
+"SÃO PEDRO DE ALCÂNTARA","SAUDADES","SCHROEDER","SEARA",
+"SERRA ALTA","SIDERÓPOLIS","SOMBRIO","SUL BRASIL","TAIÓ",
+"TANGARÁ","TIGRINHOS","TIJUCAS","TIMBÉ DO SUL","TIMBÓ",
+"TIMBÓ GRANDE","TRÊS BARRAS","TREVISO","TREZE DE MAIO",
+"TREZE TÍLIAS","TROMBUDO CENTRAL","TUBARÃO","TUNÁPOLIS",
+"TURVO","UNIÃO DO OESTE","URUBICI","URUPEMA","URUSSANGA",
+"VARGEÃO","VARGEM","VARGEM BONITA","VIDAL RAMOS","VIDEIRA",
+"VITOR MEIRELES","WITMARSUM","XANXERÊ","XAVANTINA","XAXIM",
+"ZORTÉA"
+]
 
 # ================================
-# 🔎 CONSULTA CNPJ (DUAS APIs)
+# 🚀 API OTIMIZADA (CACHE)
 # ================================
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400)
 def buscar_empresa(cnpj):
-    nome = ""
-    telefone = ""
-    socios = ""
-
     try:
-        # 🔹 1. BrasilAPI (nome confiável)
-        url1 = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
-        r1 = requests.get(url1, timeout=3)
-        if r1.status_code == 200:
-            data1 = r1.json()
-            nome = data1.get("razao_social", "")
+        url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
+        r = requests.get(url, timeout=3)
 
-        # 🔹 2. ReceitaWS (telefone + sócios)
-        url2 = f"https://receitaws.com.br/v1/cnpj/{cnpj}"
-        r2 = requests.get(url2, timeout=5)
-        data2 = r2.json()
-
-        if not nome:
-            nome = data2.get("nome") or data2.get("fantasia") or "Não encontrado"
-
-        telefone = data2.get("telefone", "")
-
-        if "qsa" in data2 and data2["qsa"]:
-            socios = ", ".join([s.get("nome", "") for s in data2["qsa"][:3]])
-
-        return nome, telefone, socios
-
+        if r.status_code == 200:
+            data = r.json()
+            return (
+                data.get("razao_social", "Não encontrado"),
+                data.get("ddd_telefone_1", ""),
+                data.get("municipio", ""),
+                data.get("uf", "")
+            )
     except:
-        return nome or "Não encontrado", telefone, socios
+        pass
+
+    return "Não encontrado", "", "", ""
 
 # ================================
-# 📂 LEITURA AUTOMÁTICA
+# 📂 LEITURA
 # ================================
 def carregar_arquivo(file):
     if file.name.endswith(".csv"):
@@ -54,8 +104,34 @@ def carregar_arquivo(file):
         return pd.read_excel(file, engine="openpyxl")
 
 # ================================
-# ABAS
+# 🔍 FILTROS
 # ================================
+def filtrar_sc(df):
+    for col in ["Estado", "UF", "uf"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.upper()
+            return df[df[col].isin(["SC", "SANTA CATARINA"])]
+    return df
+
+
+def aplicar_filtros(df, usar_sc=False, cidade=None):
+    df_filtrado = df.copy()
+
+    if usar_sc:
+        df_filtrado = filtrar_sc(df_filtrado)
+
+    if cidade and cidade != "Todas":
+        if "Cidade" in df_filtrado.columns:
+            df_filtrado["Cidade"] = df_filtrado["Cidade"].astype(str).str.upper()
+            df_filtrado = df_filtrado[df_filtrado["Cidade"] == cidade]
+
+    return df_filtrado
+
+# ================================
+# 🖥️ UI
+# ================================
+st.title("📊 Sistema Inteligente de Afastamentos + FAP")
+
 aba1, aba2 = st.tabs(["📊 CNPJ Repetido", "📈 Análise FAP"])
 
 # ================================
@@ -76,10 +152,8 @@ with aba1:
             df = carregar_arquivo(file)
             df.columns = df.columns.str.strip()
 
-            # Detecta CNPJ
             col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
-            # Corrige CNPJ
             df[col_cnpj] = (
                 df[col_cnpj]
                 .astype(str)
@@ -87,59 +161,67 @@ with aba1:
                 .str.zfill(14)
             )
 
-            # Repetidos
             contagem = df[col_cnpj].value_counts()
             repetidos = contagem[contagem > 1]
 
             df_resultado = df[df[col_cnpj].isin(repetidos.index)]
 
             # ====================
-            # 🔍 FILTROS
+            # 🔍 FILTROS UI
             # ====================
-            st.sidebar.header("🔍 Filtros")
+            st.sidebar.header("🔍 Filtros Inteligentes")
 
-            if "Cidade" in df.columns:
-                cidade = st.sidebar.selectbox("Cidade", ["Todas"] + list(df["Cidade"].dropna().unique()))
-                if cidade != "Todas":
-                    df_resultado = df_resultado[df_resultado["Cidade"] == cidade]
+            usar_sc = st.sidebar.checkbox("Apenas Santa Catarina")
+
+            cidade = st.sidebar.selectbox(
+                "Filtrar por cidade",
+                ["Todas"] + sorted(CIDADES_SC)
+            )
+
+            # aplica filtros
+            df_resultado = aplicar_filtros(df_resultado, usar_sc, cidade)
 
             # ====================
-            # 🚀 CONSULTA OTIMIZADA
+            # 🚀 CONSULTA RÁPIDA
             # ====================
-            cnpjs_unicos = df_resultado[col_cnpj].unique()[:30]
+            cnpjs_unicos = df_resultado[col_cnpj].unique()[:50]
 
             mapa_nome = {}
             mapa_tel = {}
-            mapa_socios = {}
 
             for cnpj in cnpjs_unicos:
-                nome, tel, socios = buscar_empresa(cnpj)
+                nome, tel, cidade_api, uf_api = buscar_empresa(cnpj)
 
                 mapa_nome[cnpj] = nome
                 mapa_tel[cnpj] = tel
-                mapa_socios[cnpj] = socios
 
-                time.sleep(0.2)
+                # preenche cidade se não tiver
+                if "Cidade" not in df_resultado.columns and cidade_api:
+                    df_resultado.loc[df_resultado[col_cnpj] == cnpj, "Cidade"] = cidade_api
 
             df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa_nome)
             df_resultado["Telefone"] = df_resultado[col_cnpj].map(mapa_tel)
-            df_resultado["Sócios"] = df_resultado[col_cnpj].map(mapa_socios)
 
             fim = time.time()
 
             # ====================
-            # DASHBOARD
+            # 📊 DASHBOARD
             # ====================
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
+
             col1.metric("⏱ Tempo", f"{round(fim-inicio,2)}s")
-            col2.metric("📊 Empresas únicas", df_resultado[col_cnpj].nunique())
-            col3.metric("📁 Registros", df_resultado.shape[0])
+            col2.metric("🏢 Empresas únicas", df_resultado[col_cnpj].nunique())
+            col3.metric("📄 Registros", df_resultado.shape[0])
+            col4.metric(
+                "📍 Cidades",
+                df_resultado["Cidade"].nunique() if "Cidade" in df_resultado else 0
+            )
 
             # ====================
             # 🥇 RANKING
             # ====================
             ranking = (
-                df_resultado.groupby([col_cnpj,"Empresa","Telefone","Sócios"])
+                df_resultado.groupby([col_cnpj,"Empresa","Telefone"])
                 .size()
                 .reset_index(name="Afastamentos")
                 .sort_values(by="Afastamentos", ascending=False)
@@ -156,7 +238,7 @@ with aba1:
             st.bar_chart(top10["Afastamentos"])
 
             # ====================
-            # ⚠️ ALTO RISCO
+            # ⚠️ ALERTAS
             # ====================
             criticas = ranking[ranking["Afastamentos"] >= 5]
 
@@ -164,18 +246,13 @@ with aba1:
                 st.markdown("## ⚠️ Empresas com Alto Risco")
 
                 for _, row in criticas.iterrows():
-                    st.markdown(f"""
-                    <div style="background:#7f1d1d;padding:15px;border-radius:10px;margin-bottom:10px;">
-                    <b>🏢 {row['Empresa']}</b><br>
-                    📄 CNPJ: {row[col_cnpj]}<br>
-                    📞 Telefone: {row['Telefone']}<br>
-                    👥 Sócios: {row['Sócios']}<br>
-                    📊 Afastamentos: {row['Afastamentos']}
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.warning(
+                        f"{row['Empresa']} | CNPJ: {row[col_cnpj]} | "
+                        f"Afastamentos: {row['Afastamentos']}"
+                    )
 
             # ====================
-            # 📋 DADOS DETALHADOS
+            # 📋 DADOS
             # ====================
             st.markdown("## 📋 Dados Detalhados")
             st.dataframe(df_resultado, use_container_width=True)
@@ -198,7 +275,7 @@ with aba1:
             )
 
 # ================================
-# 📈 ABA 2 (FAP)
+# 📈 ABA 2
 # ================================
 with aba2:
 
