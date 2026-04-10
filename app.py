@@ -10,26 +10,39 @@ st.set_page_config(layout="wide")
 st.title("📊 Sistema Inteligente de Afastamentos + FAP")
 
 # ================================
-# 🔎 CONSULTA COMPLETA (ReceitaWS)
+# 🔎 CONSULTA CNPJ (DUAS APIs)
 # ================================
-@st.cache_data
+@st.cache_data(ttl=3600)
 def buscar_empresa(cnpj):
+    nome = ""
+    telefone = ""
+    socios = ""
+
     try:
-        url = f"https://receitaws.com.br/v1/cnpj/{cnpj}"
-        r = requests.get(url, timeout=5)
-        data = r.json()
+        # 🔹 1. BrasilAPI (nome confiável)
+        url1 = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
+        r1 = requests.get(url1, timeout=3)
+        if r1.status_code == 200:
+            data1 = r1.json()
+            nome = data1.get("razao_social", "")
 
-        nome = data.get("nome", "")
-        telefone = data.get("telefone", "")
+        # 🔹 2. ReceitaWS (telefone + sócios)
+        url2 = f"https://receitaws.com.br/v1/cnpj/{cnpj}"
+        r2 = requests.get(url2, timeout=5)
+        data2 = r2.json()
 
-        socios = ""
-        if "qsa" in data:
-            socios = ", ".join([s["nome"] for s in data["qsa"][:3]])
+        if not nome:
+            nome = data2.get("nome") or data2.get("fantasia") or "Não encontrado"
+
+        telefone = data2.get("telefone", "")
+
+        if "qsa" in data2 and data2["qsa"]:
+            socios = ", ".join([s.get("nome", "") for s in data2["qsa"][:3]])
 
         return nome, telefone, socios
 
     except:
-        return "Não encontrado", "", ""
+        return nome or "Não encontrado", telefone, socios
 
 # ================================
 # 📂 LEITURA AUTOMÁTICA
@@ -83,7 +96,7 @@ with aba1:
             # ====================
             # 🔍 FILTROS
             # ====================
-            st.sidebar.header("Filtros")
+            st.sidebar.header("🔍 Filtros")
 
             if "Cidade" in df.columns:
                 cidade = st.sidebar.selectbox("Cidade", ["Todas"] + list(df["Cidade"].dropna().unique()))
@@ -106,7 +119,7 @@ with aba1:
                 mapa_tel[cnpj] = tel
                 mapa_socios[cnpj] = socios
 
-                time.sleep(0.3)
+                time.sleep(0.2)
 
             df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa_nome)
             df_resultado["Telefone"] = df_resultado[col_cnpj].map(mapa_tel)
@@ -118,12 +131,12 @@ with aba1:
             # DASHBOARD
             # ====================
             col1, col2, col3 = st.columns(3)
-            col1.metric("Tempo", f"{round(fim-inicio,2)}s")
-            col2.metric("Empresas", df_resultado[col_cnpj].nunique())
-            col3.metric("Registros", df_resultado.shape[0])
+            col1.metric("⏱ Tempo", f"{round(fim-inicio,2)}s")
+            col2.metric("📊 Empresas únicas", df_resultado[col_cnpj].nunique())
+            col3.metric("📁 Registros", df_resultado.shape[0])
 
             # ====================
-            # RANKING
+            # 🥇 RANKING
             # ====================
             ranking = (
                 df_resultado.groupby([col_cnpj,"Empresa","Telefone","Sócios"])
@@ -132,62 +145,64 @@ with aba1:
                 .sort_values(by="Afastamentos", ascending=False)
             )
 
-            st.markdown("## Ranking")
+            st.markdown("## 🥇 Ranking de Empresas")
             st.dataframe(ranking, use_container_width=True)
 
             # ====================
-            # GRÁFICO
+            # 📊 GRÁFICO
             # ====================
-            st.markdown("## Top 10 Empresas")
+            st.markdown("## 📊 Top 10 Empresas")
             top10 = ranking.head(10).set_index("Empresa")
             st.bar_chart(top10["Afastamentos"])
 
             # ====================
-            # ALTO RISCO
+            # ⚠️ ALTO RISCO
             # ====================
             criticas = ranking[ranking["Afastamentos"] >= 5]
 
             if not criticas.empty:
-                st.markdown("## ⚠️ Alto Risco")
+                st.markdown("## ⚠️ Empresas com Alto Risco")
 
                 for _, row in criticas.iterrows():
                     st.markdown(f"""
                     <div style="background:#7f1d1d;padding:15px;border-radius:10px;margin-bottom:10px;">
-                    <b>{row['Empresa']}</b><br>
-                    CNPJ: {row[col_cnpj]}<br>
-                    Telefone: {row['Telefone']}<br>
-                    Sócios: {row['Sócios']}<br>
-                    Afastamentos: {row['Afastamentos']}
+                    <b>🏢 {row['Empresa']}</b><br>
+                    📄 CNPJ: {row[col_cnpj]}<br>
+                    📞 Telefone: {row['Telefone']}<br>
+                    👥 Sócios: {row['Sócios']}<br>
+                    📊 Afastamentos: {row['Afastamentos']}
                     </div>
                     """, unsafe_allow_html=True)
 
             # ====================
-            # DADOS
+            # 📋 DADOS DETALHADOS
             # ====================
-            st.markdown("## Dados Detalhados")
+            st.markdown("## 📋 Dados Detalhados")
             st.dataframe(df_resultado, use_container_width=True)
 
             # ====================
-            # DOWNLOAD
+            # 📥 DOWNLOAD
             # ====================
             output = BytesIO()
 
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_resultado.to_excel(writer, index=False)
+                df_resultado.to_excel(writer, index=False, sheet_name="Dados")
                 ranking.to_excel(writer, index=False, sheet_name="Ranking")
 
             output.seek(0)
 
             st.download_button(
-                "📥 Baixar relatório",
+                "📥 Baixar relatório completo",
                 output,
-                "relatorio.xlsx"
+                "relatorio_completo.xlsx"
             )
 
 # ================================
 # 📈 ABA 2 (FAP)
 # ================================
 with aba2:
+
+    st.subheader("📈 Análise Empresarial - FAP")
 
     try:
         with open("index.html", "r", encoding="utf-8") as f:
@@ -196,4 +211,4 @@ with aba2:
         components.html(html, height=900, scrolling=True)
 
     except:
-        st.error("index.html não encontrado")
+        st.error("❌ index.html não encontrado")
