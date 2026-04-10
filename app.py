@@ -2,13 +2,16 @@ import streamlit as st
 import pandas as pd
 import requests
 import time
+from concurrent.futures import ThreadPoolExecutor
 import streamlit.components.v1 as components
 
 st.set_page_config(layout="wide")
 
 st.title("📊 Sistema Inteligente de Afastamentos + FAP")
 
-# ===== FUNÇÃO CONSULTA CNPJ =====
+# ================================
+# 🚀 FUNÇÃO CONSULTA CNPJ (RÁPIDA)
+# ================================
 @st.cache_data
 def buscar_empresa(cnpj):
     try:
@@ -19,7 +22,15 @@ def buscar_empresa(cnpj):
     except:
         return ""
 
-# ===== CRIA AS ABAS =====
+# 🔥 PARALLEL
+def buscar_em_lote(cnpjs):
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        resultados = list(executor.map(buscar_empresa, cnpjs))
+    return dict(zip(cnpjs, resultados))
+
+# ================================
+# ABAS
+# ================================
 aba1, aba2 = st.tabs(["📊 CNPJ Repetido", "📈 Análise FAP"])
 
 # ================================
@@ -42,17 +53,17 @@ with aba1:
 
             try:
                 status.text("📂 Lendo planilha...")
-                progress.progress(20)
+                progress.progress(10)
 
                 df = pd.read_excel(file, engine="openpyxl")
                 df.columns = df.columns.str.strip()
 
-                progress.progress(40)
+                progress.progress(25)
                 status.text("🔍 Identificando coluna de CNPJ...")
 
                 col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
-                progress.progress(60)
+                progress.progress(40)
                 status.text("🧹 Tratando dados...")
 
                 df[col_cnpj] = (
@@ -62,7 +73,7 @@ with aba1:
                     .str.zfill(14)
                 )
 
-                progress.progress(70)
+                progress.progress(55)
                 status.text("📊 Identificando repetidos...")
 
                 contagem = df[col_cnpj].value_counts()
@@ -70,12 +81,36 @@ with aba1:
 
                 df_resultado = df[df[col_cnpj].isin(cnpjs_repetidos.index)]
 
+                progress.progress(65)
+                status.text("⚡ Preparando consultas...")
+
+                # 🚀 CONSULTA OTIMIZADA
+                cnpjs_unicos = df_resultado[col_cnpj].unique()
+
+                mapa_empresas = {}
+
+                progress_api = st.progress(0)
+                status.text("🌐 Consultando Receita Federal...")
+
+                # 🔥 EM LOTES + PARALELO
+                for i in range(0, len(cnpjs_unicos), 20):
+
+                    lote = cnpjs_unicos[i:i+20]
+                    resultado_lote = buscar_em_lote(lote)
+
+                    mapa_empresas.update(resultado_lote)
+
+                    progress_api.progress(min((i+20)/len(cnpjs_unicos), 1))
+                    time.sleep(0.5)
+
+                df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa_empresas)
+
+                # 🔗 LINK RECEITA
+                df_resultado["Consulta"] = df_resultado[col_cnpj].apply(
+                    lambda cnpj: f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
+                )
+
                 progress.progress(80)
-                status.text("🌐 Consultando Receita...")
-
-                df_resultado["Empresa"] = df_resultado[col_cnpj].apply(buscar_empresa)
-
-                progress.progress(90)
                 status.text("📊 Gerando estatísticas...")
 
                 total_empresas = df_resultado[col_cnpj].nunique()
@@ -94,6 +129,9 @@ with aba1:
                 progress.progress(100)
                 status.text("✅ Finalizado!")
 
+                # ========================
+                # DASHBOARD
+                # ========================
                 col1, col2, col3 = st.columns(3)
 
                 col1.metric("⏱ Tempo", f"{round(fim - inicio,2)}s")
@@ -110,7 +148,7 @@ with aba1:
                 st.markdown("## 📋 Dados Detalhados")
                 st.dataframe(df_resultado, use_container_width=True)
 
-                # Download
+                # DOWNLOAD
                 output = "relatorio.xlsx"
                 df_resultado.to_excel(output, index=False)
 
