@@ -3,7 +3,6 @@ import pandas as pd
 import requests
 import time
 from io import BytesIO
-import streamlit.components.v1 as components
 
 st.set_page_config(layout="wide")
 
@@ -14,204 +13,168 @@ st.title("📊 Sistema Inteligente de Afastamentos + FAP")
 # ================================
 @st.cache_data(ttl=3600)
 def buscar_empresa(cnpj):
-    nome = ""
-    telefone = ""
-    socios = ""
-
     try:
-        # BrasilAPI (nome confiável)
         url1 = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
         r1 = requests.get(url1, timeout=3)
+        nome = ""
         if r1.status_code == 200:
-            data1 = r1.json()
-            nome = data1.get("razao_social", "")
+            nome = r1.json().get("razao_social", "")
 
-        # ReceitaWS (telefone + sócios)
         url2 = f"https://receitaws.com.br/v1/cnpj/{cnpj}"
         r2 = requests.get(url2, timeout=5)
-        data2 = r2.json()
+        data = r2.json()
 
         if not nome:
-            nome = data2.get("nome") or data2.get("fantasia") or "Não encontrado"
+            nome = data.get("nome") or data.get("fantasia") or "Não encontrado"
 
-        telefone = data2.get("telefone", "")
+        telefone = data.get("telefone", "")
 
-        if "qsa" in data2 and data2["qsa"]:
-            socios = ", ".join([s.get("nome", "") for s in data2["qsa"][:3]])
+        socios = ""
+        if "qsa" in data:
+            socios = ", ".join([s.get("nome", "") for s in data["qsa"][:3]])
 
         return nome, telefone, socios
 
     except:
-        return nome or "Não encontrado", telefone, socios
+        return "Não encontrado", "", ""
 
 # ================================
-# 📂 LEITURA ARQUIVO
+# 📂 LEITURA INTELIGENTE
 # ================================
 def carregar_arquivo(file):
+
     if file.name.endswith(".csv"):
-        return pd.read_csv(file, sep=None, engine="python")
+        try:
+            return pd.read_csv(file, sep=";", encoding="utf-8")
+        except:
+            try:
+                return pd.read_csv(file, sep=",", encoding="latin1")
+            except:
+                return pd.read_csv(file, engine="python")
+
     else:
         return pd.read_excel(file, engine="openpyxl")
 
 # ================================
-# ABAS
+# 🔍 DETECTAR COLUNA
 # ================================
-aba1, aba2 = st.tabs(["📊 CNPJ Repetido", "📈 Análise FAP"])
-
-# ================================
-# 📊 ABA 1
-# ================================
-with aba1:
-
-    st.subheader("📊 Análise Inteligente de Empresas")
-
-    file = st.file_uploader("Envie Excel ou CSV", type=["xlsx","csv"])
-
-    if file:
-
-        if st.button("🚀 Processar"):
-
-            inicio = time.time()
-
-            df = carregar_arquivo(file)
-            df.columns = df.columns.str.strip()
-
-            # ====================
-            # 🔵 FILTRO SC
-            # ====================
-            col_uf = next((c for c in df.columns if "UF" in c.upper() or "ESTADO" in c.upper()), None)
-
-            if col_uf:
-                df = df[df[col_uf].astype(str).str.upper().str.contains("SC")]
-            else:
-                st.warning("⚠️ Coluna de UF não encontrada")
-
-            # ====================
-            # CNPJ
-            # ====================
-            col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
-
-            df[col_cnpj] = (
-                df[col_cnpj]
-                .astype(str)
-                .str.replace(r'\D', '', regex=True)
-                .str.zfill(14)
-            )
-
-            # ====================
-            # REPETIDOS
-            # ====================
-            contagem = df[col_cnpj].value_counts()
-            repetidos = contagem[contagem > 1]
-
-            df_resultado = df[df[col_cnpj].isin(repetidos.index)]
-
-            # ====================
-            # CONSULTA API
-            # ====================
-            cnpjs_unicos = df_resultado[col_cnpj].unique()[:30]
-
-            mapa_nome = {}
-            mapa_tel = {}
-            mapa_socios = {}
-
-            for cnpj in cnpjs_unicos:
-                nome, tel, socios = buscar_empresa(cnpj)
-
-                mapa_nome[cnpj] = nome
-                mapa_tel[cnpj] = tel
-                mapa_socios[cnpj] = socios
-
-                time.sleep(0.2)
-
-            df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa_nome)
-            df_resultado["Telefone"] = df_resultado[col_cnpj].map(mapa_tel)
-            df_resultado["Sócios"] = df_resultado[col_cnpj].map(mapa_socios)
-
-            fim = time.time()
-
-            # ====================
-            # DASHBOARD
-            # ====================
-            col1, col2, col3 = st.columns(3)
-            col1.metric("⏱ Tempo", f"{round(fim-inicio,2)}s")
-            col2.metric("📊 Empresas únicas", df_resultado[col_cnpj].nunique())
-            col3.metric("📁 Registros", df_resultado.shape[0])
-
-            # ====================
-            # RANKING
-            # ====================
-            ranking = (
-                df_resultado.groupby([col_cnpj,"Empresa","Telefone","Sócios"])
-                .size()
-                .reset_index(name="Afastamentos")
-                .sort_values(by="Afastamentos", ascending=False)
-            )
-
-            st.markdown("## 🥇 Ranking de Empresas")
-            st.dataframe(ranking, use_container_width=True)
-
-            # ====================
-            # GRÁFICO
-            # ====================
-            st.markdown("## 📊 Top 10 Empresas")
-            top10 = ranking.head(10).set_index("Empresa")
-            st.bar_chart(top10["Afastamentos"])
-
-            # ====================
-            # ALTO RISCO
-            # ====================
-            criticas = ranking[ranking["Afastamentos"] >= 5]
-
-            if not criticas.empty:
-                st.markdown("## ⚠️ Empresas com Alto Risco")
-
-                for _, row in criticas.iterrows():
-                    st.markdown(f"""
-                    <div style="background:#7f1d1d;padding:15px;border-radius:10px;margin-bottom:10px;">
-                    <b>🏢 {row['Empresa']}</b><br>
-                    📄 CNPJ: {row[col_cnpj]}<br>
-                    📞 Telefone: {row['Telefone']}<br>
-                    👥 Sócios: {row['Sócios']}<br>
-                    📊 Afastamentos: {row['Afastamentos']}
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            # ====================
-            # DADOS DETALHADOS
-            # ====================
-            st.markdown("## 📋 Dados Detalhados")
-            st.dataframe(df_resultado, use_container_width=True)
-
-            # ====================
-            # DOWNLOAD
-            # ====================
-            output = BytesIO()
-
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_resultado.to_excel(writer, index=False, sheet_name="Dados")
-                ranking.to_excel(writer, index=False, sheet_name="Ranking")
-
-            output.seek(0)
-
-            st.download_button(
-                "📥 Baixar relatório completo",
-                output,
-                "relatorio_completo.xlsx"
-            )
+def detectar_coluna(df, palavras):
+    for col in df.columns:
+        for p in palavras:
+            if p in col.upper():
+                return col
+    return None
 
 # ================================
-# 📈 ABA 2 (FAP)
+# APP
 # ================================
-with aba2:
+file = st.file_uploader("Envie Excel ou CSV", type=["xlsx", "csv"])
 
-    st.subheader("📈 Análise Empresarial - FAP")
+if file:
 
-    try:
-        with open("index.html", "r", encoding="utf-8") as f:
-            html = f.read()
+    if st.button("🚀 Processar"):
 
-        components.html(html, height=900, scrolling=True)
+        df = carregar_arquivo(file)
+        df.columns = df.columns.str.strip()
 
-    except:
-        st.error("❌ index.html não encontrado")
+        st.write("📋 Colunas detectadas:", list(df.columns))
+
+        # ====================
+        # 🔵 FILTRO SC
+        # ====================
+        col_uf = detectar_coluna(df, ["UF", "ESTADO"])
+
+        if col_uf:
+            df[col_uf] = df[col_uf].astype(str).str.upper()
+            df = df[df[col_uf].str.contains("SC", na=False)]
+            st.success(f"Filtro aplicado: {col_uf}")
+        else:
+            st.warning("⚠️ Não encontrou coluna de UF/Estado")
+
+        # ====================
+        # 🔎 CNPJ
+        # ====================
+        col_cnpj = detectar_coluna(df, ["CNPJ"])
+
+        if not col_cnpj:
+            st.error("❌ Não encontrou coluna de CNPJ")
+            st.stop()
+
+        df[col_cnpj] = (
+            df[col_cnpj]
+            .astype(str)
+            .str.replace(r'\D', '', regex=True)
+            .str.zfill(14)
+        )
+
+        # ====================
+        # REPETIDOS
+        # ====================
+        contagem = df[col_cnpj].value_counts()
+        df = df[df[col_cnpj].isin(contagem[contagem > 1].index)]
+
+        # ====================
+        # CONSULTA API
+        # ====================
+        cnpjs = df[col_cnpj].unique()[:20]
+
+        mapa_nome = {}
+        mapa_tel = {}
+        mapa_socios = {}
+
+        for cnpj in cnpjs:
+            nome, tel, socios = buscar_empresa(cnpj)
+
+            mapa_nome[cnpj] = nome
+            mapa_tel[cnpj] = tel
+            mapa_socios[cnpj] = socios
+
+            time.sleep(0.2)
+
+        df["Empresa"] = df[col_cnpj].map(mapa_nome)
+        df["Telefone"] = df[col_cnpj].map(mapa_tel)
+        df["Sócios"] = df[col_cnpj].map(mapa_socios)
+
+        # ====================
+        # DASHBOARD
+        # ====================
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("Empresas", df[col_cnpj].nunique())
+        col2.metric("Registros", df.shape[0])
+        col3.metric("CNPJs repetidos", len(cnpjs))
+
+        # ====================
+        # RANKING
+        # ====================
+        ranking = (
+            df.groupby(["Empresa","Telefone","Sócios"])
+            .size()
+            .reset_index(name="Afastamentos")
+            .sort_values(by="Afastamentos", ascending=False)
+        )
+
+        st.markdown("## 🥇 Ranking")
+        st.dataframe(ranking, use_container_width=True)
+
+        # ====================
+        # GRÁFICO
+        # ====================
+        st.markdown("## 📊 Top 10")
+        top10 = ranking.head(10).set_index("Empresa")
+        st.bar_chart(top10["Afastamentos"])
+
+        # ====================
+        # DADOS
+        # ====================
+        st.markdown("## 📋 Dados Detalhados")
+        st.dataframe(df, use_container_width=True)
+
+        # ====================
+        # DOWNLOAD
+        # ====================
+        output = BytesIO()
+        df.to_excel(output, index=False)
+        output.seek(0)
+
+        st.download_button("📥 Baixar Excel", output, "relatorio.xlsx")
