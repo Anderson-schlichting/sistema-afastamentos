@@ -3,13 +3,14 @@ import pandas as pd
 import requests
 import time
 from io import BytesIO
+import streamlit.components.v1 as components
 
 st.set_page_config(layout="wide")
 
-st.title("📊 Sistema Inteligente de Afastamentos")
+st.title("📊 Sistema Inteligente de Afastamentos + FAP")
 
 # ================================
-# 📂 LEITURA ARQUIVO
+# 📂 LEITURA
 # ================================
 def carregar_arquivo(file):
     if file.name.endswith(".csv"):
@@ -25,7 +26,6 @@ def buscar_empresa(cnpj):
     try:
         url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
         r = requests.get(url, timeout=3)
-
         nome = r.json().get("razao_social", "")
 
         url2 = f"https://receitaws.com.br/v1/cnpj/{cnpj}"
@@ -35,129 +35,164 @@ def buscar_empresa(cnpj):
         telefone = data.get("telefone", "")
         socios = ", ".join([s.get("nome","") for s in data.get("qsa", [])[:3]])
 
+        if not nome:
+            nome = data.get("nome") or data.get("fantasia") or "Não encontrado"
+
         return nome, telefone, socios
 
     except:
         return "Não encontrado", "", ""
 
 # ================================
-# INTERFACE
+# ABAS
 # ================================
-file = st.file_uploader("Envie Excel ou CSV", type=["xlsx","csv"])
+aba1, aba2 = st.tabs(["📊 CNPJ Repetido", "📈 Análise FAP"])
 
-if file:
+# ================================
+# 📊 ABA 1
+# ================================
+with aba1:
 
-    if st.button("🚀 Processar"):
+    st.subheader("📊 Análise de Empresas")
 
-        df = carregar_arquivo(file)
-        df.columns = df.columns.str.strip()
+    file = st.file_uploader("Envie Excel ou CSV", type=["xlsx","csv"])
 
-        st.write("📋 Colunas detectadas:", list(df.columns))
+    if file:
 
-        # ====================
-        # DETECTA CNPJ
-        # ====================
-        col_cnpj = next(
-            (c for c in df.columns if "CNPJ" in c.upper() or "CEI" in c.upper()),
-            None
-        )
+        if st.button("🚀 Processar"):
 
-        if not col_cnpj:
-            st.error("❌ Não encontrei coluna de CNPJ")
-            st.stop()
+            df = carregar_arquivo(file)
+            df.columns = df.columns.str.strip()
 
-        # ====================
-        # DETECTA CIDADE
-        # ====================
-        col_cidade = next(
-            (c for c in df.columns if "MUNIC" in c.upper() or "CIDADE" in c.upper()),
-            None
-        )
+            st.write("📋 Colunas detectadas:", list(df.columns))
 
-        # ====================
-        # LIMPA CNPJ
-        # ====================
-        df[col_cnpj] = (
-            df[col_cnpj]
-            .astype(str)
-            .str.replace(r'\D', '', regex=True)
-            .str.zfill(14)
-        )
+            # ====================
+            # 🔎 DETECTA CNPJ (INTELIGENTE)
+            # ====================
+            col_cnpj = next(
+                (c for c in df.columns if any(x in c.upper() for x in ["CNPJ","CEI","EMPREGADOR"])),
+                None
+            )
 
-        # ====================
-        # FILTRO SC (se tiver cidade)
-        # ====================
-        if col_cidade:
-            df = df[df[col_cidade].notna()]
+            if not col_cnpj:
+                st.error("❌ Não encontrei coluna de CNPJ")
+                st.stop()
 
-        # ====================
-        # REPETIDOS
-        # ====================
-        contagem = df[col_cnpj].value_counts()
-        repetidos = contagem[contagem > 1]
+            # ====================
+            # 🏙️ DETECTA CIDADE
+            # ====================
+            col_cidade = next(
+                (c for c in df.columns if "MUNIC" in c.upper()),
+                None
+            )
 
-        df_resultado = df[df[col_cnpj].isin(repetidos.index)]
+            # ====================
+            # LIMPA CNPJ
+            # ====================
+            df[col_cnpj] = (
+                df[col_cnpj]
+                .astype(str)
+                .str.replace(r'\D', '', regex=True)
+                .str.zfill(14)
+            )
 
-        # ====================
-        # CONSULTA EMPRESAS
-        # ====================
-        cnpjs = df_resultado[col_cnpj].dropna().unique()[:20]
+            # ====================
+            # REPETIDOS
+            # ====================
+            contagem = df[col_cnpj].value_counts()
+            repetidos = contagem[contagem > 1]
 
-        mapa_nome = {}
-        mapa_tel = {}
-        mapa_socios = {}
+            df_resultado = df[df[col_cnpj].isin(repetidos.index)]
 
-        for cnpj in cnpjs:
-            nome, tel, socios = buscar_empresa(cnpj)
-            mapa_nome[cnpj] = nome
-            mapa_tel[cnpj] = tel
-            mapa_socios[cnpj] = socios
+            # ====================
+            # CONSULTA EMPRESAS
+            # ====================
+            cnpjs = df_resultado[col_cnpj].dropna().unique()[:20]
 
-            time.sleep(0.2)
+            mapa_nome = {}
+            mapa_tel = {}
+            mapa_socios = {}
 
-        df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa_nome)
-        df_resultado["Telefone"] = df_resultado[col_cnpj].map(mapa_tel)
-        df_resultado["Sócios"] = df_resultado[col_cnpj].map(mapa_socios)
+            progress = st.progress(0)
 
-        # ====================
-        # RANKING
-        # ====================
-        ranking = (
-            df_resultado.groupby(["Empresa","Telefone","Sócios"])
-            .size()
-            .reset_index(name="Afastamentos")
-            .sort_values(by="Afastamentos", ascending=False)
-        )
+            for i, cnpj in enumerate(cnpjs):
+                nome, tel, socios = buscar_empresa(cnpj)
 
-        st.markdown("## 🥇 Ranking")
-        st.dataframe(ranking, use_container_width=True)
+                mapa_nome[cnpj] = nome
+                mapa_tel[cnpj] = tel
+                mapa_socios[cnpj] = socios
 
-        # ====================
-        # GRÁFICO
-        # ====================
-        st.markdown("## 📊 Top 10")
-        top10 = ranking.head(10).set_index("Empresa")
-        st.bar_chart(top10["Afastamentos"])
+                progress.progress((i+1)/len(cnpjs))
 
-        # ====================
-        # DADOS
-        # ====================
-        st.markdown("## 📋 Dados")
-        st.dataframe(df_resultado, use_container_width=True)
+                time.sleep(0.2)
 
-        # ====================
-        # DOWNLOAD
-        # ====================
-        output = BytesIO()
+            df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa_nome)
+            df_resultado["Telefone"] = df_resultado[col_cnpj].map(mapa_tel)
+            df_resultado["Sócios"] = df_resultado[col_cnpj].map(mapa_socios)
 
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df_resultado.to_excel(writer, index=False)
-            ranking.to_excel(writer, index=False, sheet_name="Ranking")
+            # ====================
+            # DASHBOARD
+            # ====================
+            st.markdown("## 🥇 Ranking de Empresas")
 
-        output.seek(0)
+            ranking = (
+                df_resultado.groupby(["Empresa","Telefone","Sócios"])
+                .size()
+                .reset_index(name="Afastamentos")
+                .sort_values(by="Afastamentos", ascending=False)
+            )
 
-        st.download_button(
-            "📥 Baixar relatório",
-            output,
-            "relatorio.xlsx"
-        )
+            st.dataframe(ranking, use_container_width=True)
+
+            # ====================
+            # GRÁFICO
+            # ====================
+            st.markdown("## 📊 Top 10 Empresas")
+            st.bar_chart(ranking.head(10).set_index("Empresa")["Afastamentos"])
+
+            # ====================
+            # RANKING POR CIDADE
+            # ====================
+            if col_cidade:
+                st.markdown("## 🏙️ Ranking por Cidade")
+                ranking_cidade = df_resultado.groupby(col_cidade).size().reset_index(name="Afastamentos")
+                st.bar_chart(ranking_cidade.set_index(col_cidade))
+
+            # ====================
+            # DADOS
+            # ====================
+            st.markdown("## 📋 Dados Detalhados")
+            st.dataframe(df_resultado, use_container_width=True)
+
+            # ====================
+            # DOWNLOAD
+            # ====================
+            output = BytesIO()
+
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_resultado.to_excel(writer, index=False)
+                ranking.to_excel(writer, index=False, sheet_name="Ranking")
+
+            output.seek(0)
+
+            st.download_button(
+                "📥 Baixar relatório",
+                output,
+                "relatorio.xlsx"
+            )
+
+# ================================
+# 📈 ABA 2 (FAP)
+# ================================
+with aba2:
+
+    st.subheader("📈 Análise Empresarial - FAP")
+
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            html = f.read()
+
+        components.html(html, height=900, scrolling=True)
+
+    except:
+        st.warning("⚠️ Arquivo index.html não encontrado")
