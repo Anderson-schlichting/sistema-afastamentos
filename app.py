@@ -10,7 +10,7 @@ st.set_page_config(layout="wide")
 st.title("📊 Sistema Inteligente de Afastamentos + FAP")
 
 # ================================
-# 🔎 CONSULTA CNPJ (DUAS APIs)
+# 🔎 CONSULTA CNPJ
 # ================================
 @st.cache_data(ttl=3600)
 def buscar_empresa(cnpj):
@@ -19,14 +19,14 @@ def buscar_empresa(cnpj):
     socios = ""
 
     try:
-        # 🔹 1. BrasilAPI (nome confiável)
+        # BrasilAPI (nome confiável)
         url1 = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
         r1 = requests.get(url1, timeout=3)
         if r1.status_code == 200:
             data1 = r1.json()
             nome = data1.get("razao_social", "")
 
-        # 🔹 2. ReceitaWS (telefone + sócios)
+        # ReceitaWS (telefone + sócios)
         url2 = f"https://receitaws.com.br/v1/cnpj/{cnpj}"
         r2 = requests.get(url2, timeout=5)
         data2 = r2.json()
@@ -45,7 +45,7 @@ def buscar_empresa(cnpj):
         return nome or "Não encontrado", telefone, socios
 
 # ================================
-# 📂 LEITURA AUTOMÁTICA
+# 📂 LEITURA ARQUIVO
 # ================================
 def carregar_arquivo(file):
     if file.name.endswith(".csv"):
@@ -76,10 +76,21 @@ with aba1:
             df = carregar_arquivo(file)
             df.columns = df.columns.str.strip()
 
-            # Detecta CNPJ
+            # ====================
+            # 🔵 FILTRO SC
+            # ====================
+            col_uf = next((c for c in df.columns if "UF" in c.upper() or "ESTADO" in c.upper()), None)
+
+            if col_uf:
+                df = df[df[col_uf].astype(str).str.upper().str.contains("SC")]
+            else:
+                st.warning("⚠️ Coluna de UF não encontrada")
+
+            # ====================
+            # CNPJ
+            # ====================
             col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
-            # Corrige CNPJ
             df[col_cnpj] = (
                 df[col_cnpj]
                 .astype(str)
@@ -87,24 +98,16 @@ with aba1:
                 .str.zfill(14)
             )
 
-            # Repetidos
+            # ====================
+            # REPETIDOS
+            # ====================
             contagem = df[col_cnpj].value_counts()
             repetidos = contagem[contagem > 1]
 
             df_resultado = df[df[col_cnpj].isin(repetidos.index)]
 
             # ====================
-            # 🔍 FILTROS
-            # ====================
-            st.sidebar.header("🔍 Filtros")
-
-            if "Cidade" in df.columns:
-                cidade = st.sidebar.selectbox("Cidade", ["Todas"] + list(df["Cidade"].dropna().unique()))
-                if cidade != "Todas":
-                    df_resultado = df_resultado[df_resultado["Cidade"] == cidade]
-
-            # ====================
-            # 🚀 CONSULTA OTIMIZADA
+            # CONSULTA API
             # ====================
             cnpjs_unicos = df_resultado[col_cnpj].unique()[:30]
 
@@ -136,7 +139,7 @@ with aba1:
             col3.metric("📁 Registros", df_resultado.shape[0])
 
             # ====================
-            # 🥇 RANKING
+            # RANKING
             # ====================
             ranking = (
                 df_resultado.groupby([col_cnpj,"Empresa","Telefone","Sócios"])
@@ -149,14 +152,14 @@ with aba1:
             st.dataframe(ranking, use_container_width=True)
 
             # ====================
-            # 📊 GRÁFICO
+            # GRÁFICO
             # ====================
             st.markdown("## 📊 Top 10 Empresas")
             top10 = ranking.head(10).set_index("Empresa")
             st.bar_chart(top10["Afastamentos"])
 
             # ====================
-            # ⚠️ ALTO RISCO
+            # ALTO RISCO
             # ====================
             criticas = ranking[ranking["Afastamentos"] >= 5]
 
@@ -175,13 +178,13 @@ with aba1:
                     """, unsafe_allow_html=True)
 
             # ====================
-            # 📋 DADOS DETALHADOS
+            # DADOS DETALHADOS
             # ====================
             st.markdown("## 📋 Dados Detalhados")
             st.dataframe(df_resultado, use_container_width=True)
 
             # ====================
-            # 📥 DOWNLOAD
+            # DOWNLOAD
             # ====================
             output = BytesIO()
 
