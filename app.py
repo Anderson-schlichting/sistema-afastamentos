@@ -7,7 +7,7 @@ file = st.file_uploader("Envie a planilha Excel", type=["xlsx"])
 
 if file:
     # Lê a primeira aba automaticamente
-    df = pd.read_excel(file)
+    df = pd.read_excel(file, engine="openpyxl")
 
     # Nome da coluna de CNPJ (ajuste se necessário)
     col_cnpj = "CNPJ/CEI Empregador"
