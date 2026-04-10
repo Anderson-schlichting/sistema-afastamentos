@@ -1,26 +1,21 @@
 import streamlit as st
 import pandas as pd
 import requests
-import time
 from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor
+import streamlit.components.v1 as components
 
 st.set_page_config(layout="wide")
 
-st.title("📊 Sistema Inteligente de Afastamentos (SC via Receita)")
+st.title("📊 Sistema Inteligente de Afastamentos + FAP")
 
-# ================================
-# 📂 LEITURA
-# ================================
 def carregar_arquivo(file):
     if file.name.endswith(".csv"):
         return pd.read_csv(file, sep=None, engine="python")
     else:
         return pd.read_excel(file, engine="openpyxl")
 
-# ================================
-# 🔎 CONSULTA RECEITA
-# ================================
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400)
 def buscar_empresa(cnpj):
     try:
         url = f"https://receitaws.com.br/v1/cnpj/{cnpj}"
@@ -28,9 +23,10 @@ def buscar_empresa(cnpj):
         data = r.json()
 
         if data.get("status") == "ERROR":
-            return {}
+            return None
 
         return {
+            "cnpj": cnpj,
             "nome": data.get("nome") or data.get("fantasia"),
             "uf": data.get("uf"),
             "telefone": data.get("telefone"),
@@ -38,119 +34,109 @@ def buscar_empresa(cnpj):
         }
 
     except:
-        return {}
+        return None
 
-# ================================
-# 📤 UPLOAD
-# ================================
-file = st.file_uploader("Envie Excel ou CSV", type=["xlsx", "csv"])
+def consultar_lote(cnpjs):
+    resultados = []
 
-if file:
+    def task(cnpj):
+        info = buscar_empresa(cnpj)
+        if not info:
+            return None
+        uf = str(info.get("uf", "")).upper().strip()
+        if "SC" in uf:
+            return info
 
-    if st.button("🚀 Processar"):
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        for r in executor.map(task, cnpjs):
+            if r:
+                resultados.append(r)
 
-        df = carregar_arquivo(file)
-        df.columns = df.columns.str.strip()
+    return resultados
 
-        # ====================
-        # 🔍 IDENTIFICA CNPJ
-        # ====================
-        col_cnpj = next((c for c in df.columns if "CNPJ" in c.upper()), None)
+aba1, aba2 = st.tabs(["📊 CNPJ Repetido", "📈 Análise FAP"])
 
-        if not col_cnpj:
-            st.error("❌ Coluna CNPJ não encontrada")
-            st.stop()
+with aba1:
+    st.subheader("📊 Análise de Empresas (Santa Catarina)")
+    file = st.file_uploader("Envie Excel ou CSV", type=["xlsx", "csv"])
 
-        # ====================
-        # LIMPA CNPJ
-        # ====================
-        df[col_cnpj] = (
-            df[col_cnpj]
-            .astype(str)
-            .str.replace(r"\D", "", regex=True)
-            .str.zfill(14)
-        )
+    if file:
+        if st.button("🚀 Processar"):
+            df = carregar_arquivo(file)
+            df.columns = df.columns.str.strip()
 
-        # ====================
-        # LISTA CNPJs
-        # ====================
-        cnpjs = df[col_cnpj].dropna().unique()
+            col_cnpj = next((c for c in df.columns if "CNPJ" in c.upper()), None)
 
-        st.info(f"🔍 Consultando {len(cnpjs)} empresas na Receita...")
+            if not col_cnpj:
+                st.error("❌ Coluna CNPJ não encontrada")
+                st.stop()
 
-        progress = st.progress(0)
-        status = st.empty()
+            df[col_cnpj] = (
+                df[col_cnpj]
+                .astype(str)
+                .str.replace(r"\D", "", regex=True)
+                .str.zfill(14)
+            )
 
-        dados = []
+            contagem = df[col_cnpj].value_counts()
+            cnpjs_relevantes = contagem[contagem > 1].index
 
-        # ====================
-        # 🔄 CONSULTA COM FILTRO SC
-        # ====================
-        for i, cnpj in enumerate(cnpjs):
+            df = df[df[col_cnpj].isin(cnpjs_relevantes)]
+            cnpjs = df[col_cnpj].dropna().unique()
 
-            status.text(f"Consultando {i+1}/{len(cnpjs)}")
+            st.info(f"⚡ Consultando {len(cnpjs)} empresas relevantes...")
 
-            info = buscar_empresa(cnpj)
+            dados = consultar_lote(cnpjs)
+            df_empresas = pd.DataFrame(dados)
 
-            uf = str(info.get("uf", "")).upper().strip()
+            if df_empresas.empty:
+                st.warning("⚠️ Nenhuma empresa de SC encontrada")
+                st.stop()
 
-            if "SC" in uf:  # 👈 FILTRO REAL
-                dados.append({
-                    "CNPJ": cnpj,
-                    "Empresa": info.get("nome", "Não encontrado"),
-                    "Telefone": info.get("telefone"),
-                    "Sócios": info.get("socios")
-                })
+            ranking = (
+                df.groupby(col_cnpj)
+                .size()
+                .reset_index(name="Afastamentos")
+            )
 
-            progress.progress((i + 1) / len(cnpjs))
-            time.sleep(0.15)
+            ranking = ranking.merge(
+                df_empresas,
+                left_on=col_cnpj,
+                right_on="cnpj"
+            )
 
-        df_empresas = pd.DataFrame(dados)
+            ranking = ranking.sort_values(by="Afastamentos", ascending=False)
 
-        if df_empresas.empty:
-            st.warning("⚠️ Nenhuma empresa de SC encontrada na Receita")
-            st.stop()
+            st.success("✅ Processamento concluído")
 
-        # ====================
-        # 📊 CONTAGEM
-        # ====================
-        ranking = (
-            df[df[col_cnpj].isin(df_empresas["CNPJ"])]
-            .groupby(col_cnpj)
-            .size()
-            .reset_index(name="Afastamentos")
-        )
+            st.markdown("## 🥇 Ranking de Empresas (SC)")
+            st.dataframe(
+                ranking[["cnpj", "nome", "telefone", "socios", "Afastamentos"]],
+                use_container_width=True
+            )
 
-        ranking = ranking.merge(df_empresas, left_on=col_cnpj, right_on="CNPJ")
+            st.markdown("## 📊 Top 10 Empresas")
+            st.bar_chart(
+                ranking.head(10).set_index("nome")["Afastamentos"]
+            )
 
-        ranking = ranking.sort_values(by="Afastamentos", ascending=False)
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                ranking.to_excel(writer, index=False)
 
-        # ====================
-        # 📈 RESULTADO
-        # ====================
-        st.success("✅ Processamento concluído")
+            output.seek(0)
 
-        st.markdown("## 🥇 Ranking de Empresas (SC)")
-        st.dataframe(ranking, use_container_width=True)
+            st.download_button(
+                "📥 Baixar Excel",
+                output,
+                "ranking_sc.xlsx"
+            )
 
-        # ====================
-        # 📊 GRÁFICO
-        # ====================
-        st.markdown("## 📊 Top 10 Empresas")
-        st.bar_chart(ranking.head(10).set_index("Empresa")["Afastamentos"])
-
-        # ====================
-        # 📥 DOWNLOAD
-        # ====================
-        output = BytesIO()
-
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            ranking.to_excel(writer, index=False)
-
-        output.seek(0)
-
-        st.download_button(
-            "📥 Baixar Excel",
-            output,
-            "ranking_sc.xlsx"
-        )
+with aba2:
+    st.subheader("📈 Análise Empresarial - FAP")
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            html = f.read()
+        components.html(html, height=900, scrolling=True)
+    except:
+        st.warning("⚠️ Arquivo index.html não encontrado")
