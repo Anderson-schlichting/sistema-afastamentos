@@ -164,7 +164,9 @@ CIDADES_SC = [
 "VIDAL RAMOS","VIDEIRA","VITOR MEIRELES","WITMARSUM","XANXERÊ",
 "XAVANTINA","XAXIM","ZORTÉA"
 ]
-
+    # ================================
+    # 📂 UPLOAD
+    # ================================
     file = st.file_uploader("Envie CSV ou Excel")
 
     # ================================
@@ -221,7 +223,7 @@ CIDADES_SC = [
     # ================================
     # 🚀 PROCESSAMENTO
     # ================================
-    if file and st.button("🚀 Processar"):
+    if file is not None and st.button("🚀 Processar"):
 
         df = carregar_arquivo(file)
 
@@ -233,22 +235,23 @@ CIDADES_SC = [
 
         col_cnpj = detectar_cnpj(df)
 
-        if not col_cnpj:
+        if col_cnpj is None:
             st.error("Coluna CNPJ não encontrada")
             st.stop()
 
         # normalizar CNPJ
         df[col_cnpj] = (
-            df[col_cnpj].astype(str)
+            df[col_cnpj]
+            .astype(str)
             .str.replace(r"\D","",regex=True)
             .str.zfill(14)
         )
 
-        # duplicados
+        # pegar duplicados
         df = df[df[col_cnpj].duplicated(keep=False)]
 
         # ================================
-        # 📍 CIDADE PLANILHA
+        # 📍 CIDADE CSV
         # ================================
         col_cidade = None
         for c in df.columns:
@@ -256,18 +259,18 @@ CIDADES_SC = [
                 col_cidade = c
                 break
 
-        if col_cidade:
+        if col_cidade is not None:
             df["cidade"] = df[col_cidade].apply(limpar_cidade)
         else:
             df["cidade"] = ""
 
         # ================================
-        # 🔄 CONSULTA COM %
+        # 🔄 CONSULTA API COM %
         # ================================
-        st.markdown("## 🔄 Processando dados...")
+        st.markdown("## 🔄 Processando...")
 
         progress_bar = st.progress(0)
-        status_text = st.empty()
+        status = st.empty()
 
         dados_lista = []
         cnpjs = df[col_cnpj].unique()
@@ -277,10 +280,10 @@ CIDADES_SC = [
 
             for i, cnpj in enumerate(cnpjs):
 
-                progresso = int(((i+1)/total)*100)
+                pct = int(((i + 1) / total) * 100)
 
-                status_text.markdown(f"### 🔄 Processando: {progresso}%")
-                progress_bar.progress(progresso)
+                status.markdown(f"### 🔄 {pct}% concluído")
+                progress_bar.progress(pct)
 
                 dados = consultar_cnpj(cnpj)
 
@@ -301,7 +304,7 @@ CIDADES_SC = [
         df = df.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
 
         # ================================
-        # 📍 FILTRO SC ROBUSTO
+        # 📍 FILTRO SC
         # ================================
         df["cidade_api"] = df["cidade_api"].astype(str).str.upper()
         df["cidade"] = df["cidade"].astype(str).str.upper()
@@ -317,22 +320,22 @@ CIDADES_SC = [
             st.stop()
 
         # ================================
-        # 📊 RANKING POR CIDADE
+        # 📊 RANKING
         # ================================
-        ranking_cidade = df["cidade_api"].value_counts().reset_index()
-        ranking_cidade.columns = ["Cidade", "Empresas"]
+        ranking = df["cidade_api"].value_counts().reset_index()
+        ranking.columns = ["Cidade", "Empresas"]
 
         st.markdown("## 📊 Ranking por Cidade")
-        st.dataframe(ranking_cidade, use_container_width=True)
+        st.dataframe(ranking, use_container_width=True)
 
-        st.bar_chart(ranking_cidade.set_index("Cidade"))
+        st.bar_chart(ranking.set_index("Cidade"))
 
         # ================================
         # 🗺️ MAPA
         # ================================
-        st.markdown("## 🗺️ Distribuição")
+        st.markdown("## 🗺️ Mapa")
 
-        mapa = ranking_cidade.copy()
+        mapa = ranking.copy()
         mapa["lat"] = -27
         mapa["lon"] = -50
 
@@ -354,12 +357,14 @@ CIDADES_SC = [
 
         for _, row in leads.head(10).iterrows():
 
-            telefone = str(row["telefone"]).replace("(","").replace(")","").replace("-","").replace(" ","")
+            tel = str(row["telefone"])
+            tel = tel.replace("(","").replace(")","").replace("-","").replace(" ","")
 
-            if telefone:
-                link = f"https://wa.me/55{telefone}?text=Olá, analisamos sua empresa e identificamos oportunidades de redução no FAP."
+            if tel and tel != "nan":
 
-                st.markdown(f"👉 {row['empresa']} - [Chamar no WhatsApp]({link})")
+                link = f"https://wa.me/55{tel}?text=Olá, analisamos sua empresa e identificamos oportunidades de redução no FAP."
+
+                st.markdown(f"👉 {row['empresa']} - [WhatsApp]({link})")
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
