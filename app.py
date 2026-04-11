@@ -74,19 +74,27 @@ def calcular_fap_valores(folha, rat, fap_atual, fap_ideal):
     }
 
 # ================================
-# 🎯 SCORE EMPRESA (1 a 200)
+# 🎯 SCORE EMPRESA (CORRIGIDO)
 # ================================
 def score_empresa(qtd):
     score = min(qtd * 5, 200)
 
     if score >= 30:
-        cor = "🔴"
+        nivel = "🔴"
     elif score >= 15:
-        cor = "🟠"
+        nivel = "🟠"
     else:
-        cor = "🟢"
+        nivel = "🟢"
 
-    return score, cor
+    return pd.Series([score, nivel])
+
+
+# aplica no ranking
+if not ranking.empty:
+    ranking[["Score", "Nivel"]] = ranking["Afastamentos"].apply(score_empresa)
+else:
+    ranking["Score"] = []
+    ranking["Nivel"] = []
 
 # ================================
 # 📊 ABAS
