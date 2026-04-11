@@ -183,145 +183,146 @@ with aba1:
         st.dataframe(df, use_container_width=True)
 
 # ================================
-# 🔎 ABA 2 - COMPLETA (PRO)
+# 🔎 ABA 2 - CONSULTA + FAP
 # ================================
-st.subheader("🔎 Consulta Completa + FAP")
+with aba2:
 
-# ================================
-# 🔧 FUNÇÃO API MELHORADA
-# ================================
-@st.cache_data(ttl=86400)
-def consultar_cnpj_seguro(cnpj):
-    try:
-        url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
-        r = requests.get(url, timeout=5)
+    st.subheader("🔎 Consulta Completa + FAP")
 
-        if r.status_code == 200:
-            data = r.json()
+    # ================================
+    # 🔧 API
+    # ================================
+    @st.cache_data(ttl=86400)
+    def consultar_cnpj_seguro(cnpj):
+        try:
+            url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
+            r = requests.get(url, timeout=5)
 
-            if isinstance(data, dict):
-                return {
-                    "empresa": data.get("razao_social",""),
-                    "fantasia": data.get("nome_fantasia",""),
-                    "telefone": data.get("ddd_telefone_1",""),
-                    "cidade": data.get("municipio",""),
-                    "uf": data.get("uf",""),
-                    "cnae": data.get("cnae_fiscal_descricao",""),
-                    "socios": ", ".join([q.get("nome_socio","") for q in data.get("qsa",[])])
-                }
+            if r.status_code == 200:
+                data = r.json()
 
-    except Exception as e:
-        return {"erro": str(e)}
+                if isinstance(data, dict):
+                    return {
+                        "empresa": data.get("razao_social",""),
+                        "fantasia": data.get("nome_fantasia",""),
+                        "telefone": data.get("ddd_telefone_1",""),
+                        "cidade": data.get("municipio",""),
+                        "uf": data.get("uf",""),
+                        "cnae": data.get("cnae_fiscal_descricao",""),
+                        "socios": ", ".join([q.get("nome_socio","") for q in data.get("qsa",[])])
+                    }
 
-    return {}
+        except:
+            pass
 
-# ================================
-# 🧠 ENTRADA CNPJ
-# ================================
-cnpj_input = st.text_input("Digite o CNPJ")
+        return {}
 
-dados = {}
+    # ================================
+    # 🧠 CNPJ
+    # ================================
+    cnpj_input = st.text_input("Digite o CNPJ")
 
-if cnpj_input:
-    cnpj = ''.join(filter(str.isdigit, cnpj_input)).zfill(14)
+    dados = {}
 
-    if len(cnpj) == 14:
+    if cnpj_input:
+        cnpj = ''.join(filter(str.isdigit, cnpj_input)).zfill(14)
 
-        with st.spinner("Consultando Receita..."):
-            dados = consultar_cnpj_seguro(cnpj)
+        if len(cnpj) == 14:
 
-        if dados and "empresa" in dados:
+            with st.spinner("Consultando Receita..."):
+                dados = consultar_cnpj_seguro(cnpj)
 
-            st.success("Empresa encontrada")
+            if dados and dados.get("empresa"):
 
-            col1, col2 = st.columns(2)
+                st.success("Empresa encontrada")
 
-            col1.write(f"🏢 Empresa: {dados['empresa']}")
-            col1.write(f"🏷 Fantasia: {dados['fantasia']}")
-            col1.write(f"📞 Telefone: {dados['telefone']}")
+                col1, col2 = st.columns(2)
 
-            col2.write(f"📍 Cidade: {dados['cidade']}")
-            col2.write(f"🌎 UF: {dados['uf']}")
-            col2.write(f"🏭 CNAE: {dados['cnae']}")
+                col1.write(f"🏢 Empresa: {dados['empresa']}")
+                col1.write(f"🏷 Fantasia: {dados['fantasia']}")
+                col1.write(f"📞 Telefone: {dados['telefone']}")
 
-            st.write(f"👥 Sócios: {dados['socios']}")
+                col2.write(f"📍 Cidade: {dados['cidade']}")
+                col2.write(f"🌎 UF: {dados['uf']}")
+                col2.write(f"🏭 CNAE: {dados['cnae']}")
+
+                st.write(f"👥 Sócios: {dados['socios']}")
+
+            else:
+                st.error("❌ CNPJ não encontrado ou API instável")
+
+    # ================================
+    # 📊 DADOS
+    # ================================
+    st.markdown("## 📊 Dados da Empresa")
+
+    colA, colB, colC = st.columns(3)
+
+    funcionarios = colA.number_input("👷 Nº Funcionários", 0)
+    ano_inicio = colB.number_input("📅 Ano início problema", 2000, 2035)
+    folha = colC.number_input("💰 Folha salarial mensal (R$)", 0.0)
+
+    # ================================
+    # 📊 BENEFÍCIOS
+    # ================================
+    st.markdown("## ⚠️ Benefícios INSS")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    b91 = c1.number_input("B91", 0)
+    b31 = c2.number_input("B31", 0)
+    b94 = c3.number_input("B94", 0)
+    outros = c4.number_input("Outros", 0)
+
+    total_afast = b91 + b31 + b94 + outros
+    st.info(f"Total de afastamentos: {total_afast}")
+
+    # ================================
+    # 📊 FAP
+    # ================================
+    st.markdown("## 📊 Parâmetros FAP")
+
+    c1, c2 = st.columns(2)
+
+    rat = c1.number_input("RAT (ex: 0.02)", 0.0)
+    fap_atual = c2.number_input("FAP atual", 0.5, 2.0)
+
+    fap_ideal = st.slider("FAP ideal", 0.5, 2.0, 1.0)
+
+    # ================================
+    # 💰 CÁLCULO
+    # ================================
+    if st.button("💰 Calcular Impacto Financeiro"):
+
+        if folha > 0 and rat > 0:
+
+            valor_atual = folha * rat * fap_atual
+            valor_correto = folha * rat * fap_ideal
+
+            economia = max(valor_atual - valor_correto, 0)
+
+            economia_anual = economia * 12
+            recuperavel = economia * 60
+
+            st.markdown("## 💰 Resultado")
+
+            c1, c2, c3 = st.columns(3)
+
+            c1.metric("💸 Valor Atual", f"R$ {valor_atual:,.2f}")
+            c2.metric("✅ Valor Correto", f"R$ {valor_correto:,.2f}")
+            c3.metric("📉 Economia Mensal", f"R$ {economia:,.2f}")
+
+            c4, c5 = st.columns(2)
+
+            c4.metric("📊 Economia Anual", f"R$ {economia_anual:,.2f}")
+            c5.metric("🏦 Recuperável (5 anos)", f"R$ {recuperavel:,.2f}")
 
         else:
-            st.error("❌ CNPJ não encontrado ou API instável")
+            st.warning("Preencha folha e RAT")
 
-# ================================
-# 📊 DADOS OPERACIONAIS
-# ================================
-st.markdown("## 📊 Dados da Empresa")
+    # ================================
+    # 📝 OBS
+    # ================================
+    st.markdown("## 📝 Observações")
 
-colA, colB, colC = st.columns(3)
-
-funcionarios = colA.number_input("👷 Nº Funcionários", 0)
-ano_inicio = colB.number_input("📅 Ano início problema", 2000, 2035)
-folha = colC.number_input("💰 Folha salarial mensal (R$)", 0.0)
-
-# ================================
-# 📊 BENEFÍCIOS
-# ================================
-st.markdown("## ⚠️ Benefícios INSS")
-
-c1, c2, c3, c4 = st.columns(4)
-
-b91 = c1.number_input("B91", 0)
-b31 = c2.number_input("B31", 0)
-b94 = c3.number_input("B94", 0)
-outros = c4.number_input("Outros", 0)
-
-total_afast = b91 + b31 + b94 + outros
-
-st.info(f"Total de afastamentos: {total_afast}")
-
-# ================================
-# 📊 PARÂMETROS FAP
-# ================================
-st.markdown("## 📊 Parâmetros FAP")
-
-c1, c2 = st.columns(2)
-
-rat = c1.number_input("RAT (ex: 0.02)", 0.0)
-fap_atual = c2.number_input("FAP atual", 0.5, 2.0)
-
-fap_ideal = st.slider("FAP ideal", 0.5, 2.0, 1.0)
-
-# ================================
-# 🧠 CÁLCULO COMPLETO
-# ================================
-if st.button("💰 Calcular Impacto Financeiro"):
-
-    if folha > 0 and rat > 0:
-
-        valor_atual = folha * rat * fap_atual
-        valor_correto = folha * rat * fap_ideal
-
-        economia = max(valor_atual - valor_correto, 0)
-
-        economia_anual = economia * 12
-        recuperavel = economia * 60
-
-        st.markdown("## 💰 Resultado")
-
-        c1, c2, c3 = st.columns(3)
-
-        c1.metric("💸 Valor Atual", f"R$ {valor_atual:,.2f}")
-        c2.metric("✅ Valor Correto", f"R$ {valor_correto:,.2f}")
-        c3.metric("📉 Economia Mensal", f"R$ {economia:,.2f}")
-
-        c4, c5 = st.columns(2)
-
-        c4.metric("📊 Economia Anual", f"R$ {economia_anual:,.2f}")
-        c5.metric("🏦 Recuperável (5 anos)", f"R$ {recuperavel:,.2f}")
-
-    else:
-        st.warning("Preencha folha e RAT")
-
-# ================================
-# 📝 OBSERVAÇÕES
-# ================================
-st.markdown("## 📝 Observações")
-
-obs = st.text_area("Anotações sobre a empresa")
+    obs = st.text_area("Anotações")
