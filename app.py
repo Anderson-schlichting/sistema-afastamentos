@@ -2,192 +2,242 @@ import streamlit as st
 import pandas as pd
 import requests
 import time
-from datetime import datetime
+from io import BytesIO
+from reportlab.platypus import SimpleDocTemplate, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
 
 st.set_page_config(layout="wide")
 
-st.title("📊 Sistema Inteligente Empresarial")
+st.title("📊 Sistema Inteligente Empresas + FAP PRO")
 
 # ================================
-# 📂 LEITURA
-# ================================
-def carregar_arquivo(file):
-    try:
-        if file.name.endswith(".csv"):
-            return pd.read_csv(file, sep=';', encoding='latin1')
-        else:
-            return pd.read_excel(file)
-    except:
-        return None
-
-# ================================
-# 🧠 LIMPAR CIDADE
-# ================================
-def limpar_cidade(valor):
-    if pd.isna(valor):
-        return ""
-    valor = str(valor)
-    if "-" in valor:
-        valor = valor.split("-", 1)[1]
-    return valor.strip().upper()
-
-# ================================
-# 🔎 API
+# 🚀 API COM CACHE
 # ================================
 @st.cache_data(ttl=86400)
 def consultar_cnpj(cnpj):
     try:
         url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
         r = requests.get(url, timeout=3)
+
         if r.status_code == 200:
-            return r.json()
+            data = r.json()
+
+            return {
+                "empresa": data.get("razao_social"),
+                "fantasia": data.get("nome_fantasia"),
+                "telefone": data.get("ddd_telefone_1"),
+                "cidade": data.get("municipio"),
+                "uf": data.get("uf"),
+                "socios": ", ".join([q.get("nome_socio","") for q in data.get("qsa",[])])
+            }
     except:
         pass
-    return {}
+
+    return None
 
 # ================================
-# 📊 SCORE
+# 📂 LEITURA INTELIGENTE
+# ================================
+def carregar_arquivo(file):
+    try:
+        if file.name.endswith(".csv"):
+            return pd.read_csv(file, sep=';', encoding='latin1')
+        return pd.read_excel(file)
+    except:
+        return None
+
+# ================================
+# 🔎 DETECTAR CNPJ
+# ================================
+def detectar_cnpj(df):
+    for c in df.columns:
+        if "CNPJ" in c.upper():
+            return c
+    return None
+
+# ================================
+# 📊 FAP REAL
+# ================================
+def calcular_fap_valores(folha, rat, fap_atual, fap_ideal):
+
+    atual = folha * rat * fap_atual
+    correto = folha * rat * fap_ideal
+
+    economia = max(atual - correto, 0)
+
+    return {
+        "atual": atual,
+        "correto": correto,
+        "mensal": economia,
+        "anual": economia * 12,
+        "recuperavel": economia * 60
+    }
+
+# ================================
+# 🎯 SCORE EMPRESA (1 a 200)
 # ================================
 def score_empresa(qtd):
-    return min(qtd * 10, 200)
+    score = min(qtd * 5, 200)
 
-def classificar(score):
     if score >= 30:
-        return "🔴 Alto"
+        cor = "🔴"
     elif score >= 15:
-        return "🟠 Médio"
+        cor = "🟠"
     else:
-        return "🟢 Baixo"
+        cor = "🟢"
+
+    return score, cor
 
 # ================================
-# 💰 CÁLCULO FINANCEIRO
+# 📊 ABAS
 # ================================
-def calcular_valores(afastamentos, anos=5):
-    valor_base = afastamentos * 1200
-    total = valor_base * anos
-    mensal = valor_base / 12
-    projecao = mensal * 12
-    return total, mensal, projecao
-
-# ================================
-# ABAS
-# ================================
-aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta"])
+aba1, aba2 = st.tabs(["📊 Análise Inteligente", "🔎 Consulta + FAP"])
 
 # ================================
 # 📊 ABA 1
 # ================================
 with aba1:
 
-    file = st.file_uploader("Envie Excel ou CSV")
+    file = st.file_uploader("Envie CSV ou Excel")
 
     if file and st.button("🚀 Processar"):
 
-        progress = st.progress(0)
         df = carregar_arquivo(file)
 
         if df is None:
             st.error("Erro ao ler arquivo")
             st.stop()
 
-        df.columns = df.columns.str.strip()
+        df.columns = df.columns.astype(str).str.strip()
 
-        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
-        col_cidade = [c for c in df.columns if "MUNIC" in c.upper()][0]
+        col_cnpj = detectar_cnpj(df)
 
-        df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r'\D','',regex=True).str.zfill(14)
-        df["CIDADE_LIMPA"] = df[col_cidade].apply(limpar_cidade)
+        if not col_cnpj:
+            st.error("Coluna CNPJ não encontrada")
+            st.stop()
 
-        df_resultado = df[df[col_cnpj].duplicated(keep=False)]
+        df[col_cnpj] = (
+            df[col_cnpj].astype(str)
+            .str.replace(r"\D","",regex=True)
+            .str.zfill(14)
+        )
 
-        lista = []
-        total = len(df_resultado[col_cnpj].unique())
+        # duplicados
+        df = df[df[col_cnpj].duplicated(keep=False)]
 
-        for i, cnpj in enumerate(df_resultado[col_cnpj].unique()):
+        progress = st.progress(0)
+
+        dados_api = []
+        total = len(df[col_cnpj].unique())
+        lote = 10
+
+        for i, cnpj in enumerate(df[col_cnpj].unique()):
+
             dados = consultar_cnpj(cnpj)
 
-            lista.append({
-                "CNPJ": cnpj,
-                "Empresa": dados.get("razao_social",""),
-                "Telefone": dados.get("ddd_telefone_1",""),
-                "Cidade": dados.get("municipio",""),
-                "Socios": ", ".join([s.get("nome","") for s in dados.get("qsa",[])[:2]])
-            })
+            if dados and dados["empresa"]:  # 🔥 garante empresa válida
 
-            progress.progress((i+1)/total)
+                dados_api.append({
+                    "CNPJ": cnpj,
+                    **dados
+                })
 
-        df_api = pd.DataFrame(lista)
+            if i % lote == 0:
+                progress.progress(i / total)
 
-        df_resultado = df_resultado.merge(df_api, left_on=col_cnpj, right_on="CNPJ")
+        progress.progress(1.0)
 
-        ranking = df_resultado.groupby(["CNPJ","Empresa","Telefone","Cidade","Socios"]).size().reset_index(name="Afastamentos")
+        df_api = pd.DataFrame(dados_api)
 
-        ranking["Score"] = ranking["Afastamentos"].apply(score_empresa)
-        ranking["Classificação"] = ranking["Score"].apply(classificar)
+        df = df.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
 
+        # somente SC
+        df = df[df["uf"] == "SC"]
+
+        # ranking
+        ranking = (
+            df.groupby(["CNPJ","empresa","telefone","socios","cidade"])
+            .size()
+            .reset_index(name="Afastamentos")
+        )
+
+        ranking["Score"], ranking["Nivel"] = zip(*ranking["Afastamentos"].apply(score_empresa))
+
+        # ====================
         # DASHBOARD
-        st.success("Processado com sucesso")
+        # ====================
+        st.success("Processamento concluído")
 
-        c1,c2,c3 = st.columns(3)
+        c1, c2, c3 = st.columns(3)
         c1.metric("Empresas", ranking.shape[0])
-        c2.metric("Registros", df_resultado.shape[0])
-        c3.metric("Oportunidades", (ranking["Score"]>=15).sum())
+        c2.metric("Registros", df.shape[0])
+        c3.metric("SC", ranking.shape[0])
 
-        st.markdown("## 📊 Ranking Comercial")
-        st.dataframe(ranking.sort_values("Score", ascending=False))
+        st.markdown("## 📊 Ranking Inteligente")
 
-        st.markdown("## 📈 Top Empresas")
-        st.bar_chart(ranking.set_index("Empresa")["Score"].head(10))
+        st.dataframe(ranking, use_container_width=True)
 
-        st.markdown("## 🎯 Classificação")
-        st.write(ranking["Classificação"].value_counts())
+        st.bar_chart(ranking.set_index("empresa")["Afastamentos"])
+
+        st.markdown("## 📋 Base Completa")
+        st.dataframe(df, use_container_width=True)
 
 # ================================
-# 🔎 ABA 2
+# 🔎 ABA 2 (FAP COMPLETO)
 # ================================
 with aba2:
 
-    cnpj_input = st.text_input("Digite o CNPJ")
+    st.subheader("Consulta + Cálculo FAP")
 
-    if cnpj_input:
+    cnpj = st.text_input("Digite o CNPJ")
 
-        cnpj = ''.join(filter(str.isdigit, cnpj_input)).zfill(14)
+    if cnpj:
+
+        cnpj = ''.join(filter(str.isdigit, cnpj)).zfill(14)
+
         dados = consultar_cnpj(cnpj)
 
         if dados:
 
             st.success("Empresa encontrada")
 
-            afastamentos = st.number_input("Quantidade de afastamentos", 0, 100, 5)
-            anos = st.number_input("Anos para cálculo", 1, 10, 5)
+            st.write("Empresa:", dados["empresa"])
+            st.write("Sócios:", dados["socios"])
+            st.write("Telefone:", dados["telefone"])
+            st.write("Cidade:", dados["cidade"])
 
-            total, mensal, projecao = calcular_valores(afastamentos, anos)
+            st.markdown("### 📊 Simulação FAP")
 
-            col1,col2 = st.columns(2)
+            folha = st.number_input("Folha salarial mensal")
+            rat = st.number_input("RAT (ex: 0.02)")
+            fap_atual = st.number_input("FAP atual", 0.5, 2.0)
+            fap_ideal = st.number_input("FAP ideal", 0.5, 2.0)
 
-            col1.write(f"Empresa: {dados.get('razao_social')}")
-            col1.write(f"Telefone: {dados.get('ddd_telefone_1')}")
+            if st.button("Calcular"):
 
-            col2.write(f"Cidade: {dados.get('municipio')}")
-            col2.write(f"UF: {dados.get('uf')}")
+                res = calcular_fap_valores(folha, rat, fap_atual, fap_ideal)
 
-            st.markdown("## 💰 Simulação Financeira")
-            st.metric("Valor Recuperável", f"R$ {total:,.2f}")
-            st.metric("Economia Mensal", f"R$ {mensal:,.2f}")
-            st.metric("Projeção 12 meses", f"R$ {projecao:,.2f}")
+                st.success(f"Economia mensal: R$ {res['mensal']:.2f}")
+                st.info(f"Economia anual: R$ {res['anual']:.2f}")
+                st.warning(f"Recuperável 5 anos: R$ {res['recuperavel']:.2f}")
 
-            obs = st.text_area("📝 Anotações")
+                # PDF
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(buffer)
+                styles = getSampleStyleSheet()
 
-            if "historico" not in st.session_state:
-                st.session_state["historico"] = []
+                story = [
+                    Paragraph(f"Empresa: {dados['empresa']}", styles["Normal"]),
+                    Paragraph(f"Economia mensal: R$ {res['mensal']:.2f}", styles["Normal"]),
+                    Paragraph(f"Recuperável: R$ {res['recuperavel']:.2f}", styles["Normal"]),
+                ]
 
-            if st.button("Salvar Consulta"):
-                st.session_state["historico"].append({
-                    "CNPJ": cnpj,
-                    "Empresa": dados.get("razao_social"),
-                    "Valor": total
-                })
+                doc.build(story)
 
-        st.markdown("## 📜 Histórico")
-        if "historico" in st.session_state:
-            st.dataframe(pd.DataFrame(st.session_state["historico"]))
+                st.download_button(
+                    "📄 Baixar PDF",
+                    buffer.getvalue(),
+                    "relatorio.pdf"
+                )
+        else:
+            st.error("CNPJ não encontrado")
