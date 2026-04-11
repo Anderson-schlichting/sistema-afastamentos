@@ -183,7 +183,7 @@ with aba1:
         st.dataframe(df, use_container_width=True)
 
 # ================================
-# 🔎 ABA 2 PROFISSIONAL (POWER BI)
+# 🔎 ABA 2 FINAL AJUSTADA
 # ================================
 with aba2:
 
@@ -191,15 +191,12 @@ with aba2:
     from io import BytesIO
     import pandas as pd
 
-    # tentativa segura do Plotly
     try:
-        import plotly.express as px
         import plotly.graph_objects as go
         PLOTLY_OK = True
     except:
         PLOTLY_OK = False
 
-    # PDF opcional
     try:
         from reportlab.platypus import SimpleDocTemplate, Paragraph
         from reportlab.lib.styles import getSampleStyleSheet
@@ -207,13 +204,13 @@ with aba2:
     except:
         PDF_OK = False
 
-    st.subheader("🔎 Consulta Completa + Diagnóstico FAP")
+    st.subheader("🔎 Diagnóstico Comercial FAP")
 
     # ================================
-    # 📡 API
+    # 📡 API SEGURA
     # ================================
     @st.cache_data(ttl=86400)
-    def consultar_cnpj_seguro(cnpj):
+    def consultar_cnpj(cnpj):
         try:
             url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
             r = requests.get(url, timeout=5)
@@ -223,7 +220,6 @@ with aba2:
 
                 return {
                     "empresa": data.get("razao_social",""),
-                    "fantasia": data.get("nome_fantasia",""),
                     "telefone": data.get("ddd_telefone_1",""),
                     "cidade": data.get("municipio",""),
                     "uf": data.get("uf",""),
@@ -239,20 +235,19 @@ with aba2:
     # 🧠 CNPJ
     # ================================
     cnpj_input = st.text_input("Digite o CNPJ")
-
     dados = {}
+    cnpj = ""
 
     if cnpj_input:
         cnpj = ''.join(filter(str.isdigit, cnpj_input)).zfill(14)
 
         with st.spinner("Consultando Receita..."):
-            dados = consultar_cnpj_seguro(cnpj)
+            dados = consultar_cnpj(cnpj)
 
         if dados.get("empresa"):
             st.success("Empresa encontrada")
 
             col1, col2 = st.columns(2)
-
             col1.write(f"🏢 {dados['empresa']}")
             col1.write(f"📞 {dados['telefone']}")
             col1.write(f"👥 {dados['socios']}")
@@ -260,10 +255,10 @@ with aba2:
             col2.write(f"📍 {dados['cidade']} - {dados['uf']}")
             col2.write(f"🏭 CNAE: {dados['cnae']}")
         else:
-            st.error("❌ CNPJ não encontrado")
+            st.warning("CNPJ não localizado (API pode estar instável)")
 
     # ================================
-    # 💰 ENTRADAS
+    # 💰 DADOS
     # ================================
     st.markdown("## 💰 Dados Financeiros")
 
@@ -272,9 +267,11 @@ with aba2:
     fap_atual = st.number_input("FAP atual", 0.5, 2.0)
     fap_ideal = st.slider("FAP ideal", 0.5, 2.0, 1.0)
 
+    ano_inicio = st.number_input("Ano início problema", 2000, 2035, 2023)
+
+    # formatação BR
     if folha > 0:
-        valor_formatado = f"R$ {folha:,.2f}".replace(",", "X").replace(".", ",").replace("X",".")
-        st.write(f"💰 Valor informado: {valor_formatado}")
+        st.write(f"💰 R$ {folha:,.2f}".replace(",", "X").replace(".", ",").replace("X","."))
 
     # ================================
     # 💰 CÁLCULO
@@ -283,75 +280,45 @@ with aba2:
 
         if folha > 0 and rat > 0:
 
+            hoje = datetime.datetime.now()
+            meses = (hoje.year - ano_inicio) * 12 + hoje.month
+
             atual = folha * rat * fap_atual
             correto = folha * rat * fap_ideal
             economia = max(atual - correto, 0)
 
-            anual = economia * 12
-            recuperavel = economia * 60
+            recuperavel = economia * meses
+            honorarios = recuperavel * 0.20
+            mensalidade = 5000 * 12
+            total_projeto = honorarios + mensalidade
 
-            st.markdown("## 💰 Resultado Financeiro")
+            st.markdown("## 💰 Resultado")
 
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Atual", f"R$ {atual:,.2f}")
-            c2.metric("Correto", f"R$ {correto:,.2f}")
-            c3.metric("Economia", f"R$ {economia:,.2f}")
+            st.metric("Economia Mensal", f"R$ {economia:,.2f}")
+            st.metric("Recuperável Total", f"R$ {recuperavel:,.2f}")
 
-            c4, c5 = st.columns(2)
-            c4.metric("Anual", f"R$ {anual:,.2f}")
-            c5.metric("Recuperável (5 anos)", f"R$ {recuperavel:,.2f}")
+            st.metric("Honorários (20%)", f"R$ {honorarios:,.2f}")
+            st.metric("Mensalidade (12 meses)", f"R$ {mensalidade:,.2f}")
+            st.metric("💼 Receita Total", f"R$ {total_projeto:,.2f}")
 
             # ================================
-            # 📊 GRÁFICO POWER BI (INTERATIVO)
+            # 📊 GRÁFICO BI
             # ================================
             if PLOTLY_OK:
-
-                meses = list(range(1, 13))
-
-                df_chart = pd.DataFrame({
-                    "Mês": meses,
-                    "Atual": [atual]*12,
-                    "Correto": [correto]*12,
-                    "Economia": [economia]*12
-                })
+                meses_lista = list(range(1,13))
 
                 fig = go.Figure()
 
-                fig.add_trace(go.Bar(
-                    x=df_chart["Mês"],
-                    y=df_chart["Atual"],
-                    name="Atual",
-                    marker_color="red",
-                    hovertemplate="Mês %{x}<br>R$ %{y:,.2f}"
-                ))
-
-                fig.add_trace(go.Bar(
-                    x=df_chart["Mês"],
-                    y=df_chart["Correto"],
-                    name="Correto",
-                    marker_color="green",
-                    hovertemplate="Mês %{x}<br>R$ %{y:,.2f}"
-                ))
-
-                fig.add_trace(go.Bar(
-                    x=df_chart["Mês"],
-                    y=df_chart["Economia"],
-                    name="Economia",
-                    marker_color="blue",
-                    hovertemplate="Mês %{x}<br>R$ %{y:,.2f}"
-                ))
+                fig.add_bar(x=meses_lista, y=[atual]*12, name="Atual", marker_color="red")
+                fig.add_bar(x=meses_lista, y=[correto]*12, name="Correto", marker_color="green")
+                fig.add_bar(x=meses_lista, y=[economia]*12, name="Economia", marker_color="blue")
 
                 fig.update_layout(
-                    barmode="group",
                     title="Comparativo Mensal",
-                    xaxis_title="Mês",
-                    yaxis_title="Valor (R$)"
+                    barmode="group"
                 )
 
                 st.plotly_chart(fig, use_container_width=True)
-
-            else:
-                st.info("Gráfico avançado indisponível (plotly não instalado)")
 
             # ================================
             # 📄 PROPOSTA
@@ -359,13 +326,15 @@ with aba2:
             proposta = f"""
 Empresa: {dados.get('empresa','')}
 
-Identificamos possível pagamento indevido relacionado ao FAP.
+Identificamos pagamento indevido relacionado ao FAP.
 
 Economia mensal: R$ {economia:,.2f}
-Economia anual: R$ {anual:,.2f}
-Recuperável (5 anos): R$ {recuperavel:,.2f}
+Valor recuperável: R$ {recuperavel:,.2f}
 
-Podemos atuar na revisão e recuperação desses valores.
+Honorários: 20% (R$ {honorarios:,.2f})
+Mensalidade: R$ 5.000,00
+
+Projeto estimado: R$ {total_projeto:,.2f}
 """
 
             st.markdown("## 📄 Proposta")
@@ -383,34 +352,24 @@ Podemos atuar na revisão e recuperação desses valores.
                     Paragraph(f"Empresa: {dados.get('empresa','')}", styles["Normal"]),
                     Paragraph(f"Economia mensal: R$ {economia:,.2f}", styles["Normal"]),
                     Paragraph(f"Recuperável: R$ {recuperavel:,.2f}", styles["Normal"]),
+                    Paragraph(f"Honorários: R$ {honorarios:,.2f}", styles["Normal"]),
                 ]
 
                 doc.build(story)
 
-                st.download_button(
-                    "📄 Baixar PDF",
-                    buffer.getvalue(),
-                    "relatorio.pdf"
-                )
+                st.download_button("📄 Baixar PDF", buffer.getvalue(), "proposta.pdf")
 
             # ================================
             # 📚 HISTÓRICO
             # ================================
-            registro = {
-                "data": str(datetime.datetime.now()),
-                "empresa": dados.get("empresa",""),
-                "cnpj": cnpj,
-                "economia": economia,
-                "recuperavel": recuperavel
-            }
-
             if "historico" not in st.session_state:
                 st.session_state["historico"] = []
 
-            st.session_state["historico"].append(registro)
-
-        else:
-            st.warning("Preencha folha e RAT")
+            st.session_state["historico"].append({
+                "empresa": dados.get("empresa",""),
+                "cnpj": cnpj,
+                "recuperavel": recuperavel
+            })
 
     # ================================
     # 📚 HISTÓRICO
