@@ -183,16 +183,23 @@ with aba1:
         st.dataframe(df, use_container_width=True)
 
 # ================================
-# 🔎 ABA 2 PROFISSIONAL
+# 🔎 ABA 2 COMPLETA PROFISSIONAL
 # ================================
 with aba2:
 
     import datetime
     from io import BytesIO
-    from reportlab.platypus import SimpleDocTemplate, Paragraph
-    from reportlab.lib.styles import getSampleStyleSheet
+    import pandas as pd
+    import plotly.express as px
 
-    st.subheader("🔎 Consulta Completa + Proposta")
+    try:
+        from reportlab.platypus import SimpleDocTemplate, Paragraph
+        from reportlab.lib.styles import getSampleStyleSheet
+        PDF_OK = True
+    except:
+        PDF_OK = False
+
+    st.subheader("🔎 Consulta Completa + Diagnóstico FAP")
 
     # ================================
     # 📡 API
@@ -237,35 +244,36 @@ with aba2:
 
             st.success("Empresa encontrada")
 
-            st.write(f"🏢 {dados['empresa']}")
-            st.write(f"📞 {dados['telefone']}")
-            st.write(f"📍 {dados['cidade']} - {dados['uf']}")
-            st.write(f"👥 Sócios: {dados['socios']}")
-            st.write(f"🏭 CNAE: {dados['cnae']}")
+            col1, col2 = st.columns(2)
+
+            col1.write(f"🏢 {dados['empresa']}")
+            col1.write(f"📞 {dados['telefone']}")
+            col1.write(f"👥 {dados['socios']}")
+
+            col2.write(f"📍 {dados['cidade']} - {dados['uf']}")
+            col2.write(f"🏭 CNAE: {dados['cnae']}")
 
         else:
-            st.error("CNPJ não encontrado")
+            st.error("❌ CNPJ não encontrado")
 
     # ================================
-    # 📊 ENTRADAS
+    # 💰 ENTRADAS
     # ================================
-    st.markdown("## 📊 Dados Financeiros")
+    st.markdown("## 💰 Dados Financeiros")
 
-    import locale
-locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
-
-folha = st.number_input("Folha salarial mensal (R$)", 0.0)
-
-if folha > 0:
-    st.write(f"💰 Valor informado: R$ {folha:,.2f}".replace(",", "X").replace(".", ",").replace("X","."))
+    folha = st.number_input("Folha salarial mensal (R$)", 0.0)
     rat = st.number_input("RAT (ex: 0.02)", 0.0)
     fap_atual = st.number_input("FAP atual", 0.5, 2.0)
     fap_ideal = st.slider("FAP ideal", 0.5, 2.0, 1.0)
 
+    # formatação BR
+    if folha > 0:
+        st.write(f"💰 Valor informado: R$ {folha:,.2f}".replace(",", "X").replace(".", ",").replace("X","."))
+
     # ================================
     # 💰 CÁLCULO
     # ================================
-    if st.button("💰 Gerar Diagnóstico"):
+    if st.button("🚀 Gerar Diagnóstico"):
 
         if folha > 0 and rat > 0:
 
@@ -276,67 +284,80 @@ if folha > 0:
             anual = economia * 12
             recuperavel = economia * 60
 
-            st.success("Diagnóstico concluído")
+            st.markdown("## 💰 Resultado Financeiro")
 
-            st.metric("💸 Atual", f"R$ {atual:,.2f}")
-            st.metric("✅ Correto", f"R$ {correto:,.2f}")
-            st.metric("📉 Economia Mensal", f"R$ {economia:,.2f}")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Atual", f"R$ {atual:,.2f}")
+            c2.metric("Correto", f"R$ {correto:,.2f}")
+            c3.metric("Economia", f"R$ {economia:,.2f}")
 
-            st.metric("📊 Economia Anual", f"R$ {anual:,.2f}")
-            st.metric("🏦 Recuperável", f"R$ {recuperavel:,.2f}")
-
-            import pandas as pd
-
-# ================================
-# 📊 GRÁFICO COMPARATIVO
-# ================================
-grafico_df = pd.DataFrame({
-    "Tipo": ["Atual", "Correto", "Economia"],
-    "Valor": [atual, correto, economia]
-})
-
-st.markdown("## 📊 Comparativo Financeiro")
-
-st.bar_chart(grafico_df.set_index("Tipo"))
+            c4, c5 = st.columns(2)
+            c4.metric("Anual", f"R$ {anual:,.2f}")
+            c5.metric("Recuperável (5 anos)", f"R$ {recuperavel:,.2f}")
 
             # ================================
-            # 🧠 PROPOSTA AUTOMÁTICA
+            # 📊 GRÁFICO PROFISSIONAL
+            # ================================
+            grafico_df = pd.DataFrame({
+                "Categoria": ["Atual", "Correto", "Economia"],
+                "Valor": [atual, correto, economia]
+            })
+
+            fig = px.bar(
+                grafico_df,
+                x="Categoria",
+                y="Valor",
+                color="Categoria",
+                color_discrete_map={
+                    "Atual": "red",
+                    "Correto": "green",
+                    "Economia": "blue"
+                }
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            # ================================
+            # 📄 PROPOSTA
             # ================================
             proposta = f"""
 Empresa: {dados.get('empresa','')}
 
-Identificamos um possível pagamento indevido relacionado ao FAP.
+Identificamos pagamento indevido relacionado ao FAP.
 
-Economia mensal estimada: R$ {economia:,.2f}
+Economia mensal: R$ {economia:,.2f}
 Economia anual: R$ {anual:,.2f}
-Valor recuperável (5 anos): R$ {recuperavel:,.2f}
+Recuperável (5 anos): R$ {recuperavel:,.2f}
 
-Nossa equipe pode atuar na revisão administrativa e judicial para recuperação desses valores.
+Podemos atuar na recuperação desses valores.
 """
 
-            st.markdown("## 📄 Proposta para Cliente")
+            st.markdown("## 📄 Proposta")
             st.text_area("Copiar proposta", proposta, height=200)
 
             # ================================
             # 📄 PDF
             # ================================
-            buffer = BytesIO()
-            doc = SimpleDocTemplate(buffer)
-            styles = getSampleStyleSheet()
+            if PDF_OK:
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(buffer)
+                styles = getSampleStyleSheet()
 
-            story = [
-                Paragraph(f"Empresa: {dados.get('empresa','')}", styles["Normal"]),
-                Paragraph(f"Economia mensal: R$ {economia:,.2f}", styles["Normal"]),
-                Paragraph(f"Recuperável: R$ {recuperavel:,.2f}", styles["Normal"]),
-            ]
+                story = [
+                    Paragraph(f"Empresa: {dados.get('empresa','')}", styles["Normal"]),
+                    Paragraph(f"Economia mensal: R$ {economia:,.2f}", styles["Normal"]),
+                    Paragraph(f"Recuperável: R$ {recuperavel:,.2f}", styles["Normal"]),
+                ]
 
-            doc.build(story)
+                doc.build(story)
 
-            st.download_button(
-                "📄 Baixar PDF",
-                buffer.getvalue(),
-                "proposta.pdf"
-            )
+                st.download_button(
+                    "📄 Baixar PDF",
+                    buffer.getvalue(),
+                    "relatorio.pdf"
+                )
+            else:
+                st.warning("PDF indisponível")
 
             # ================================
             # 📚 HISTÓRICO
