@@ -74,8 +74,16 @@ def calcular_fap_valores(folha, rat, fap_atual, fap_ideal):
     }
 
 # ================================
-# 🎯 SCORE EMPRESA (CORRIGIDO)
+# 📊 RANKING + SCORE (CORRIGIDO)
 # ================================
+
+ranking = (
+    df.groupby(["CNPJ","empresa","telefone","socios","cidade"])
+    .size()
+    .reset_index(name="Afastamentos")
+)
+
+# função score
 def score_empresa(qtd):
     score = min(qtd * 5, 200)
 
@@ -88,8 +96,7 @@ def score_empresa(qtd):
 
     return pd.Series([score, nivel])
 
-
-# aplica no ranking
+# aplica score (SOMENTE DEPOIS DO RANKING EXISTIR)
 if not ranking.empty:
     ranking[["Score", "Nivel"]] = ranking["Afastamentos"].apply(score_empresa)
 else:
