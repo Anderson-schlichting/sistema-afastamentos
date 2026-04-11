@@ -85,12 +85,75 @@ def calcular_fap(folha, rat, fap_atual, fap_ideal):
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 
 # ================================
-# 📊 ABA 1
+# 📊 ABA 1 FINAL CORRIGIDA
 # ================================
 with aba1:
 
+    import pandas as pd
+
+    st.subheader("📊 Análise de Empresas")
+
     file = st.file_uploader("Envie CSV ou Excel")
 
+    # ================================
+    # 📂 LEITURA
+    # ================================
+    def carregar_arquivo(file):
+        try:
+            if file.name.endswith(".csv"):
+                return pd.read_csv(file, sep=';', encoding='latin1')
+            return pd.read_excel(file)
+        except:
+            return None
+
+    # ================================
+    # 🔎 DETECTAR CNPJ
+    # ================================
+    def detectar_cnpj(df):
+        for c in df.columns:
+            if "CNPJ" in c.upper():
+                return c
+        return None
+
+    # ================================
+    # 🧠 LIMPAR CIDADE
+    # ================================
+    def limpar_cidade(valor):
+        if pd.isna(valor):
+            return ""
+        valor = str(valor)
+        if "-" in valor:
+            valor = valor.split("-", 1)[1]
+        return valor.strip().upper()
+
+    # ================================
+    # 📡 API
+    # ================================
+    @st.cache_data(ttl=86400)
+    def consultar_cnpj(cnpj):
+        try:
+            import requests
+            url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
+            r = requests.get(url, timeout=3)
+
+            if r.status_code == 200:
+                data = r.json()
+
+                return {
+                    "empresa": data.get("razao_social",""),
+                    "telefone": data.get("ddd_telefone_1",""),
+                    "cidade_api": data.get("municipio",""),
+                    "uf": data.get("uf",""),
+                    "socios": ", ".join([q.get("nome_socio","") for q in data.get("qsa",[])])
+                }
+        except:
+            pass
+
+        return {}
+
+    # ================================
+    # 🚀 PROCESSAR
+    # ================================
     if file and st.button("🚀 Processar"):
 
         df = carregar_arquivo(file)
@@ -117,7 +180,22 @@ with aba1:
         # duplicados
         df = df[df[col_cnpj].duplicated(keep=False)]
 
-        st.info("🔄 Consultando Receita...")
+        # ================================
+        # 📍 CIDADE PLANILHA
+        # ================================
+        col_cidade = None
+        for c in df.columns:
+            if "MUNIC" in c.upper() or "CIDADE" in c.upper():
+                col_cidade = c
+                break
+
+        if col_cidade:
+            df["CIDADE_LIMPA"] = df[col_cidade].apply(limpar_cidade)
+
+        # ================================
+        # 🔄 API
+        # ================================
+        st.info("Consultando Receita...")
 
         progress = st.progress(0)
 
@@ -129,7 +207,7 @@ with aba1:
 
             dados = consultar_cnpj(cnpj)
 
-            if dados and dados["empresa"]:
+            if dados.get("empresa"):
                 dados_lista.append({
                     "CNPJ": cnpj,
                     **dados
@@ -140,46 +218,62 @@ with aba1:
         df_api = pd.DataFrame(dados_lista)
 
         if df_api.empty:
-            st.error("Nenhuma empresa válida encontrada na Receita")
+            st.error("Nenhuma empresa encontrada na Receita")
             st.stop()
 
         df = df.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
 
-        # filtrar SC
-        df = df[df["uf"] == "SC"]
+        # ================================
+        # 📍 FILTRO SC INTELIGENTE
+        # ================================
+        df = df[
+            (df["uf"] == "SC") |
+            (df.get("CIDADE_LIMPA","").isin([
+                "BLUMENAU","JOINVILLE","FLORIANÓPOLIS","CHAPECÓ","ITAJAÍ","LAGES","CRICIÚMA"
+            ]))
+        ]
 
         if df.empty:
             st.warning("Nenhuma empresa de SC encontrada")
             st.stop()
 
-        # ========================
-        # RANKING
-        # ========================
+        # ================================
+        # 📊 RANKING
+        # ================================
         ranking = (
-            df.groupby(["CNPJ","empresa","telefone","socios","cidade"])
+            df.groupby(["CNPJ","empresa","telefone","socios","cidade_api"])
             .size()
             .reset_index(name="Afastamentos")
         )
 
-        if not ranking.empty:
-            ranking[["Score","Nivel"]] = ranking["Afastamentos"].apply(score_empresa)
+        # ================================
+        # 🎯 SCORE
+        # ================================
+        def score(qtd):
+            if qtd >= 30:
+                return "🔴"
+            elif qtd >= 15:
+                return "🟠"
+            else:
+                return "🟢"
 
-        # ========================
-        # DASHBOARD
-        # ========================
+        ranking["Nivel"] = ranking["Afastamentos"].apply(score)
+
+        # ================================
+        # 📊 DASHBOARD
+        # ================================
         st.success("Processamento concluído")
 
-        c1, c2, c3 = st.columns(3)
+        c1, c2 = st.columns(2)
         c1.metric("Empresas", ranking.shape[0])
         c2.metric("Registros", df.shape[0])
-        c3.metric("SC", ranking.shape[0])
 
         st.markdown("## 📊 Ranking")
         st.dataframe(ranking, use_container_width=True)
 
         st.bar_chart(ranking.set_index("empresa")["Afastamentos"])
 
-        st.markdown("## 📋 Dados")
+        st.markdown("## 📋 Dados completos")
         st.dataframe(df, use_container_width=True)
 
 # ================================
