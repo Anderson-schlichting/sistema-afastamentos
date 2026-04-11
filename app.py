@@ -183,15 +183,23 @@ with aba1:
         st.dataframe(df, use_container_width=True)
 
 # ================================
-# 🔎 ABA 2 COMPLETA PROFISSIONAL
+# 🔎 ABA 2 PROFISSIONAL (POWER BI)
 # ================================
 with aba2:
 
     import datetime
     from io import BytesIO
     import pandas as pd
-    import plotly.express as px
 
+    # tentativa segura do Plotly
+    try:
+        import plotly.express as px
+        import plotly.graph_objects as go
+        PLOTLY_OK = True
+    except:
+        PLOTLY_OK = False
+
+    # PDF opcional
     try:
         from reportlab.platypus import SimpleDocTemplate, Paragraph
         from reportlab.lib.styles import getSampleStyleSheet
@@ -241,7 +249,6 @@ with aba2:
             dados = consultar_cnpj_seguro(cnpj)
 
         if dados.get("empresa"):
-
             st.success("Empresa encontrada")
 
             col1, col2 = st.columns(2)
@@ -252,7 +259,6 @@ with aba2:
 
             col2.write(f"📍 {dados['cidade']} - {dados['uf']}")
             col2.write(f"🏭 CNAE: {dados['cnae']}")
-
         else:
             st.error("❌ CNPJ não encontrado")
 
@@ -266,9 +272,9 @@ with aba2:
     fap_atual = st.number_input("FAP atual", 0.5, 2.0)
     fap_ideal = st.slider("FAP ideal", 0.5, 2.0, 1.0)
 
-    # formatação BR
     if folha > 0:
-        st.write(f"💰 Valor informado: R$ {folha:,.2f}".replace(",", "X").replace(".", ",").replace("X","."))
+        valor_formatado = f"R$ {folha:,.2f}".replace(",", "X").replace(".", ",").replace("X",".")
+        st.write(f"💰 Valor informado: {valor_formatado}")
 
     # ================================
     # 💰 CÁLCULO
@@ -295,32 +301,75 @@ with aba2:
             c4.metric("Anual", f"R$ {anual:,.2f}")
             c5.metric("Recuperável (5 anos)", f"R$ {recuperavel:,.2f}")
 
-           # ================================
-# 📊 GRÁFICO SIMPLES (SEM PLOTLY)
-# ================================
-grafico_df = pd.DataFrame({
-    "Valor": [atual, correto, economia]
-}, index=["Atual", "Correto", "Economia"])
+            # ================================
+            # 📊 GRÁFICO POWER BI (INTERATIVO)
+            # ================================
+            if PLOTLY_OK:
 
-st.bar_chart(grafico_df)
-            
-# ================================
-# 📄 PROPOSTA (CORRIGIDA)
-# ================================
-proposta = f"""
+                meses = list(range(1, 13))
+
+                df_chart = pd.DataFrame({
+                    "Mês": meses,
+                    "Atual": [atual]*12,
+                    "Correto": [correto]*12,
+                    "Economia": [economia]*12
+                })
+
+                fig = go.Figure()
+
+                fig.add_trace(go.Bar(
+                    x=df_chart["Mês"],
+                    y=df_chart["Atual"],
+                    name="Atual",
+                    marker_color="red",
+                    hovertemplate="Mês %{x}<br>R$ %{y:,.2f}"
+                ))
+
+                fig.add_trace(go.Bar(
+                    x=df_chart["Mês"],
+                    y=df_chart["Correto"],
+                    name="Correto",
+                    marker_color="green",
+                    hovertemplate="Mês %{x}<br>R$ %{y:,.2f}"
+                ))
+
+                fig.add_trace(go.Bar(
+                    x=df_chart["Mês"],
+                    y=df_chart["Economia"],
+                    name="Economia",
+                    marker_color="blue",
+                    hovertemplate="Mês %{x}<br>R$ %{y:,.2f}"
+                ))
+
+                fig.update_layout(
+                    barmode="group",
+                    title="Comparativo Mensal",
+                    xaxis_title="Mês",
+                    yaxis_title="Valor (R$)"
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+            else:
+                st.info("Gráfico avançado indisponível (plotly não instalado)")
+
+            # ================================
+            # 📄 PROPOSTA
+            # ================================
+            proposta = f"""
 Empresa: {dados.get('empresa','')}
 
-Identificamos pagamento indevido relacionado ao FAP.
+Identificamos possível pagamento indevido relacionado ao FAP.
 
 Economia mensal: R$ {economia:,.2f}
 Economia anual: R$ {anual:,.2f}
 Recuperável (5 anos): R$ {recuperavel:,.2f}
 
-Podemos atuar na recuperação desses valores.
+Podemos atuar na revisão e recuperação desses valores.
 """
 
-st.markdown("## 📄 Proposta")
-st.text_area("Copiar proposta", proposta, height=200)
+            st.markdown("## 📄 Proposta")
+            st.text_area("Copiar proposta", proposta, height=200)
 
             # ================================
             # 📄 PDF
@@ -343,8 +392,6 @@ st.text_area("Copiar proposta", proposta, height=200)
                     buffer.getvalue(),
                     "relatorio.pdf"
                 )
-            else:
-                st.warning("PDF indisponível")
 
             # ================================
             # 📚 HISTÓRICO
@@ -362,8 +409,11 @@ st.text_area("Copiar proposta", proposta, height=200)
 
             st.session_state["historico"].append(registro)
 
+        else:
+            st.warning("Preencha folha e RAT")
+
     # ================================
-    # 📚 HISTÓRICO VISUAL
+    # 📚 HISTÓRICO
     # ================================
     st.markdown("## 📚 Histórico")
 
