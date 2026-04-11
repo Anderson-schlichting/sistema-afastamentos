@@ -2,21 +2,20 @@ import streamlit as st
 import pandas as pd
 import requests
 import time
-from io import BytesIO
-import streamlit.components.v1 as components
 
 st.set_page_config(layout="wide")
 
 # ================================
-# 📍 LISTA DE CIDADES SC
+# 📍 CIDADES SC (COMPLETO)
 # ================================
-CIDADES_SC = [ "ABDON BATISTA","ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA DOCE","ÁGUAS DE CHAPECÓ",
+CIDADES_SC = [
+"ABDON BATISTA","ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA DOCE","ÁGUAS DE CHAPECÓ",
 "ÁGUAS FRIAS","ÁGUAS MORNAS","ALFREDO WAGNER","ALTO BELA VISTA","ANCHIETA","ANGELINA",
 "ANITA GARIBALDI","ANITÁPOLIS","ANTÔNIO CARLOS","APIÚNA","ARABUTÃ","ARAQUARI","ARARANGUÁ",
 "ARMAZÉM","ARROIO TRINTA","ARVOREDO","ASCURRA","ATALANTA","AURORA","BALNEÁRIO ARROIO DO SILVA",
 "BALNEÁRIO BARRA DO SUL","BALNEÁRIO CAMBORIÚ","BALNEÁRIO GAIVOTA","BANDEIRANTE","BARRA BONITA",
 "BARRA VELHA","BELA VISTA DO TOLDO","BELMONTE","BENEDITO NOVO","BIGUAÇU","BLUMENAU","BOCAINA DO SUL",
-"BOMBINHAS","BOM JARDIM DA SERRA","BOM JESUS","BOM JESUS DO OESTE","BOM RETIRO","BOMBINHAS",
+"BOMBINHAS","BOM JARDIM DA SERRA","BOM JESUS","BOM JESUS DO OESTE","BOM RETIRO",
 "BOTUVERÁ","BRAÇO DO NORTE","BRAÇO DO TROMBUDO","BRUNÓPOLIS","BRUSQUE","CAÇADOR","CAIBI",
 "CALMON","CAMBORIÚ","CAMPO ALEGRE","CAMPO BELO DO SUL","CAMPO ERÊ","CAMPOS NOVOS",
 "CANELINHA","CANOINHAS","CAPÃO ALTO","CAPINZAL","CAPIVARI DE BAIXO","CATANDUVAS",
@@ -31,7 +30,7 @@ CIDADES_SC = [ "ABDON BATISTA","ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA
 "GUATAMBÚ","HERVAL D'OESTE","IBIAM","IBICARÉ","IBIRAMA","IÇARA",
 "ILHOTA","IMARUÍ","IMBITUBA","IMBUIA","INDAIAL","IOMERÊ","IPIRA",
 "IPORÃ DO OESTE","IPUAÇU","IPUMIRIM","IRACEMINHA","IRANI","IRATI",
-"IRINEÓPOLIS","ITÁ","ITAIAL","ITAJAÍ","ITAPEMA","ITAPIRANGA","ITAPOÁ",
+"IRINEÓPOLIS","ITÁ","ITAJAÍ","ITAPEMA","ITAPIRANGA","ITAPOÁ",
 "ITUPORANGA","JABORÁ","JACINTO MACHADO","JAGUARUNA","JARAGUÁ DO SUL",
 "JARDINÓPOLIS","JOAÇABA","JOINVILLE","JOSÉ BOITEUX","JUPIÁ",
 "LACERDÓPOLIS","LAGES","LAGUNA","LAURENTINO","LAURO MÜLLER",
@@ -68,75 +67,49 @@ CIDADES_SC = [ "ABDON BATISTA","ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA
 "TREZE TÍLIAS","TROMBUDO CENTRAL","TUBARÃO","TUNÁPOLIS",
 "TURVO","UNIÃO DO OESTE","URUBICI","URUPEMA","URUSSANGA",
 "VARGEÃO","VARGEM","VARGEM BONITA","VIDAL RAMOS","VIDEIRA",
-"VITOR MEIRELES","WITMARSUM","XANXERÊ","XAVANTINA","XAXIM",
-"ZORTÉA"]
+"VITOR MEIRELES","WITMARSUM","XANXERÊ","XAVANTINA","XAXIM","ZORTÉA"
+]
 
 # ================================
-# 📂 LEITURA FORTE CSV
+# 📂 LEITURA CSV
 # ================================
 def carregar_arquivo(file):
-   df.columns = df.columns.astype(str).str.strip()
-
-# 🔍 detectar coluna de cidade automaticamente
-col_cidade = None
-for c in df.columns:
-    if "CIDADE" in c.upper() or "MUNICIP" in c.upper():
-        col_cidade = c
-        break
-
-# DEBUG (APARECE NA TELA)
-st.write("📌 Colunas:", df.columns.tolist())
-st.write("📌 Coluna cidade detectada:", col_cidade)
+    try:
+        return pd.read_csv(file, sep=';', encoding='latin1')
+    except:
+        return pd.read_excel(file)
 
 # ================================
-# 🚀 API CNPJ
+# 🚀 API
 # ================================
 @st.cache_data(ttl=86400)
 def consultar_cnpj(cnpj):
     try:
         url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
         r = requests.get(url, timeout=3)
-
         if r.status_code == 200:
-            d = r.json()
-            return {
-                "Empresa": d.get("razao_social","Não encontrado"),
-                "Fantasia": d.get("nome_fantasia",""),
-                "Telefone": d.get("ddd_telefone_1",""),
-                "Cidade": d.get("municipio",""),
-                "UF": d.get("uf",""),
-                "Email": d.get("email","")
-            }
+            return r.json()
     except:
-        pass
-
-    return None
+        return {}
 
 # ================================
-# 🔍 FILTROS
+# 🔍 FILTRO
 # ================================
 def aplicar_filtros(df, usar_sc=False, cidade=None):
     df = df.copy()
 
-    # 🔍 detectar coluna de cidade automaticamente
     col_cidade = None
+    col_estado = None
+
     for c in df.columns:
         if "CIDADE" in c.upper() or "MUNICIP" in c.upper():
             col_cidade = c
-            break
-
-    # 🔍 detectar coluna de estado
-    col_estado = None
-    for c in df.columns:
         if "ESTADO" in c.upper() or "UF" in c.upper():
             col_estado = c
-            break
 
-    # filtro SC
     if usar_sc and col_estado:
         df = df[df[col_estado].astype(str).str.upper().str.contains("SC|SANTA CATARINA", na=False)]
 
-    # filtro cidade
     if cidade != "Todas" and col_cidade:
         df[col_cidade] = df[col_cidade].astype(str).str.upper().str.strip()
         df = df[df[col_cidade] == cidade]
@@ -144,151 +117,67 @@ def aplicar_filtros(df, usar_sc=False, cidade=None):
     return df
 
 # ================================
-# 📊 CÁLCULO FAP
+# APP
 # ================================
-def calcular_fap(df, col_cnpj):
-    ranking = (
-        df.groupby(col_cnpj)
-        .size()
-        .reset_index(name="Afastamentos")
-    )
+st.title("📊 Sistema Inteligente + FAP")
 
-    ranking["FAP"] = ranking["Afastamentos"].apply(lambda x:
-        0.5 if x <= 2 else
-        1.0 if x <= 5 else
-        1.5 if x <= 10 else
-        2.0
-    )
-
-    return ranking
+aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta"])
 
 # ================================
-# 🖥️ APP
-# ================================
-st.title("📊 Sistema Inteligente de Empresas + FAP")
-
-aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta CNPJ"])
-
-# ================================
-# 📊 ABA 1
+# ABA 1
 # ================================
 with aba1:
 
-    file = st.file_uploader("Envie Excel ou CSV")
+    file = st.file_uploader("Envie CSV ou Excel")
 
-    if file and st.button("🚀 Processar"):
+    if file and st.button("Processar"):
 
         df = carregar_arquivo(file)
 
         if df is None:
-            st.error("❌ Erro ao ler arquivo CSV")
+            st.error("Erro ao ler arquivo")
             st.stop()
 
-        df.columns = df.columns.astype(str).str.strip()
+        df.columns = df.columns.str.strip()
 
-        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()]
+        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
-        if not col_cnpj:
-            st.error("❌ Coluna CNPJ não encontrada")
-            st.stop()
+        df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r'\D','',regex=True)
 
-        col_cnpj = col_cnpj[0]
+        df_resultado = df[df[col_cnpj].duplicated(keep=False)]
 
-        df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r'\D','',regex=True).str.zfill(14)
-
-        contagem = df[col_cnpj].value_counts()
-        df_resultado = df[df[col_cnpj].isin(contagem[contagem > 1].index)]
-
-        # salva global para aba 2
-        st.session_state["df_resultado"] = df_resultado
-        st.session_state["col_cnpj"] = col_cnpj
-
-        # filtros
         usar_sc = st.checkbox("Apenas SC")
         cidade = st.selectbox("Cidade", ["Todas"] + CIDADES_SC)
 
         df_resultado = aplicar_filtros(df_resultado, usar_sc, cidade)
 
-        # dashboard
-        st.subheader("📊 Indicadores")
+        # API
+        nomes = []
+        for cnpj in df_resultado[col_cnpj].unique()[:30]:
+            dados = consultar_cnpj(cnpj)
+            nomes.append((cnpj, dados.get("razao_social","")))
 
-        c1, c2 = st.columns(2)
-        c1.metric("Empresas", df_resultado[col_cnpj].nunique())
-        c2.metric("Registros", df_resultado.shape[0])
+        mapa = dict(nomes)
+        df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa)
 
-        # ranking
-        ranking = calcular_fap(df_resultado, col_cnpj)
-
-        st.markdown("## 📈 FAP por Empresa")
-        st.dataframe(ranking, use_container_width=True)
-
-        st.bar_chart(ranking.set_index(col_cnpj)["Afastamentos"].head(10))
-
-        st.markdown("## 📋 Dados")
-        st.dataframe(df_resultado, use_container_width=True)
+        st.dataframe(df_resultado)
 
 # ================================
-# 🔎 ABA 2
+# ABA 2
 # ================================
 with aba2:
 
-    st.subheader("🔎 Consulta CNPJ + FAP")
+    cnpj = st.text_input("Digite o CNPJ")
 
-    cnpj_input = st.text_input("Digite o CNPJ")
+    if cnpj:
 
-    if cnpj_input:
+        cnpj = ''.join(filter(str.isdigit, cnpj)).zfill(14)
 
-        cnpj = ''.join(filter(str.isdigit, cnpj_input)).zfill(14)
+        dados = consultar_cnpj(cnpj)
 
-        if len(cnpj) == 14:
-
-            dados = consultar_cnpj(cnpj)
-
-            if dados:
-
-                st.success("Empresa encontrada")
-
-                col1, col2 = st.columns(2)
-
-                col1.write(f"🏢 Empresa: {dados.get('Empresa','')}")
-                col1.write(f"🏷 Fantasia: {dados.get('Fantasia','')}")
-                col1.write(f"📞 Telefone: {dados.get('Telefone','')}")
-
-                col2.write(f"📍 Cidade: {dados.get('Cidade','')}")
-                col2.write(f"🌎 UF: {dados.get('UF','')}")
-                col2.write(f"📧 Email: {dados.get('Email','')}")
-
-                # =====================
-                # 🔥 FAP AUTOMÁTICO
-                # =====================
-                if "df_resultado" in st.session_state:
-
-                    df_resultado = st.session_state["df_resultado"]
-                    col_cnpj = st.session_state["col_cnpj"]
-
-                    dados_empresa = df_resultado[df_resultado[col_cnpj] == cnpj]
-
-                    if not dados_empresa.empty:
-
-                        total = len(dados_empresa)
-
-                        if total <= 2:
-                            fap = 0.5
-                        elif total <= 5:
-                            fap = 1.0
-                        elif total <= 10:
-                            fap = 1.5
-                        else:
-                            fap = 2.0
-
-                        st.markdown("### 📊 FAP Estimado")
-                        st.success(f"Afastamentos: {total} | FAP: {fap}")
-
-                    else:
-                        st.info("Empresa não encontrada na base carregada")
-
-            else:
-                st.error("❌ CNPJ não encontrado")
-
+        if dados:
+            st.write("Empresa:", dados.get("razao_social"))
+            st.write("Cidade:", dados.get("municipio"))
+            st.write("UF:", dados.get("uf"))
         else:
-            st.warning("Digite um CNPJ válido com 14 números")
+            st.error("CNPJ não encontrado")
