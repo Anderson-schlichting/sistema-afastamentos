@@ -183,14 +183,19 @@ with aba1:
         st.dataframe(df, use_container_width=True)
 
 # ================================
-# 🔎 ABA 2 - CONSULTA + FAP
+# 🔎 ABA 2 PROFISSIONAL
 # ================================
 with aba2:
 
-    st.subheader("🔎 Consulta Completa + FAP")
+    import datetime
+    from io import BytesIO
+    from reportlab.platypus import SimpleDocTemplate, Paragraph
+    from reportlab.lib.styles import getSampleStyleSheet
+
+    st.subheader("🔎 Consulta Completa + Proposta")
 
     # ================================
-    # 🔧 API
+    # 📡 API
     # ================================
     @st.cache_data(ttl=86400)
     def consultar_cnpj_seguro(cnpj):
@@ -201,17 +206,15 @@ with aba2:
             if r.status_code == 200:
                 data = r.json()
 
-                if isinstance(data, dict):
-                    return {
-                        "empresa": data.get("razao_social",""),
-                        "fantasia": data.get("nome_fantasia",""),
-                        "telefone": data.get("ddd_telefone_1",""),
-                        "cidade": data.get("municipio",""),
-                        "uf": data.get("uf",""),
-                        "cnae": data.get("cnae_fiscal_descricao",""),
-                        "socios": ", ".join([q.get("nome_socio","") for q in data.get("qsa",[])])
-                    }
-
+                return {
+                    "empresa": data.get("razao_social",""),
+                    "fantasia": data.get("nome_fantasia",""),
+                    "telefone": data.get("ddd_telefone_1",""),
+                    "cidade": data.get("municipio",""),
+                    "uf": data.get("uf",""),
+                    "cnae": data.get("cnae_fiscal_descricao",""),
+                    "socios": ", ".join([q.get("nome_socio","") for q in data.get("qsa",[])])
+                }
         except:
             pass
 
@@ -227,102 +230,114 @@ with aba2:
     if cnpj_input:
         cnpj = ''.join(filter(str.isdigit, cnpj_input)).zfill(14)
 
-        if len(cnpj) == 14:
+        with st.spinner("Consultando Receita..."):
+            dados = consultar_cnpj_seguro(cnpj)
 
-            with st.spinner("Consultando Receita..."):
-                dados = consultar_cnpj_seguro(cnpj)
+        if dados.get("empresa"):
 
-            if dados and dados.get("empresa"):
+            st.success("Empresa encontrada")
 
-                st.success("Empresa encontrada")
+            st.write(f"🏢 {dados['empresa']}")
+            st.write(f"📞 {dados['telefone']}")
+            st.write(f"📍 {dados['cidade']} - {dados['uf']}")
+            st.write(f"👥 Sócios: {dados['socios']}")
+            st.write(f"🏭 CNAE: {dados['cnae']}")
 
-                col1, col2 = st.columns(2)
-
-                col1.write(f"🏢 Empresa: {dados['empresa']}")
-                col1.write(f"🏷 Fantasia: {dados['fantasia']}")
-                col1.write(f"📞 Telefone: {dados['telefone']}")
-
-                col2.write(f"📍 Cidade: {dados['cidade']}")
-                col2.write(f"🌎 UF: {dados['uf']}")
-                col2.write(f"🏭 CNAE: {dados['cnae']}")
-
-                st.write(f"👥 Sócios: {dados['socios']}")
-
-            else:
-                st.error("❌ CNPJ não encontrado ou API instável")
+        else:
+            st.error("CNPJ não encontrado")
 
     # ================================
-    # 📊 DADOS
+    # 📊 ENTRADAS
     # ================================
-    st.markdown("## 📊 Dados da Empresa")
+    st.markdown("## 📊 Dados Financeiros")
 
-    colA, colB, colC = st.columns(3)
-
-    funcionarios = colA.number_input("👷 Nº Funcionários", 0)
-    ano_inicio = colB.number_input("📅 Ano início problema", 2000, 2035)
-    folha = colC.number_input("💰 Folha salarial mensal (R$)", 0.0)
-
-    # ================================
-    # 📊 BENEFÍCIOS
-    # ================================
-    st.markdown("## ⚠️ Benefícios INSS")
-
-    c1, c2, c3, c4 = st.columns(4)
-
-    b91 = c1.number_input("B91", 0)
-    b31 = c2.number_input("B31", 0)
-    b94 = c3.number_input("B94", 0)
-    outros = c4.number_input("Outros", 0)
-
-    total_afast = b91 + b31 + b94 + outros
-    st.info(f"Total de afastamentos: {total_afast}")
-
-    # ================================
-    # 📊 FAP
-    # ================================
-    st.markdown("## 📊 Parâmetros FAP")
-
-    c1, c2 = st.columns(2)
-
-    rat = c1.number_input("RAT (ex: 0.02)", 0.0)
-    fap_atual = c2.number_input("FAP atual", 0.5, 2.0)
-
+    folha = st.number_input("Folha salarial mensal (R$)", 0.0)
+    rat = st.number_input("RAT (ex: 0.02)", 0.0)
+    fap_atual = st.number_input("FAP atual", 0.5, 2.0)
     fap_ideal = st.slider("FAP ideal", 0.5, 2.0, 1.0)
 
     # ================================
     # 💰 CÁLCULO
     # ================================
-    if st.button("💰 Calcular Impacto Financeiro"):
+    if st.button("💰 Gerar Diagnóstico"):
 
         if folha > 0 and rat > 0:
 
-            valor_atual = folha * rat * fap_atual
-            valor_correto = folha * rat * fap_ideal
+            atual = folha * rat * fap_atual
+            correto = folha * rat * fap_ideal
+            economia = max(atual - correto, 0)
 
-            economia = max(valor_atual - valor_correto, 0)
-
-            economia_anual = economia * 12
+            anual = economia * 12
             recuperavel = economia * 60
 
-            st.markdown("## 💰 Resultado")
+            st.success("Diagnóstico concluído")
 
-            c1, c2, c3 = st.columns(3)
+            st.metric("💸 Atual", f"R$ {atual:,.2f}")
+            st.metric("✅ Correto", f"R$ {correto:,.2f}")
+            st.metric("📉 Economia Mensal", f"R$ {economia:,.2f}")
 
-            c1.metric("💸 Valor Atual", f"R$ {valor_atual:,.2f}")
-            c2.metric("✅ Valor Correto", f"R$ {valor_correto:,.2f}")
-            c3.metric("📉 Economia Mensal", f"R$ {economia:,.2f}")
+            st.metric("📊 Economia Anual", f"R$ {anual:,.2f}")
+            st.metric("🏦 Recuperável", f"R$ {recuperavel:,.2f}")
 
-            c4, c5 = st.columns(2)
+            # ================================
+            # 🧠 PROPOSTA AUTOMÁTICA
+            # ================================
+            proposta = f"""
+Empresa: {dados.get('empresa','')}
 
-            c4.metric("📊 Economia Anual", f"R$ {economia_anual:,.2f}")
-            c5.metric("🏦 Recuperável (5 anos)", f"R$ {recuperavel:,.2f}")
+Identificamos um possível pagamento indevido relacionado ao FAP.
 
-        else:
-            st.warning("Preencha folha e RAT")
+Economia mensal estimada: R$ {economia:,.2f}
+Economia anual: R$ {anual:,.2f}
+Valor recuperável (5 anos): R$ {recuperavel:,.2f}
+
+Nossa equipe pode atuar na revisão administrativa e judicial para recuperação desses valores.
+"""
+
+            st.markdown("## 📄 Proposta para Cliente")
+            st.text_area("Copiar proposta", proposta, height=200)
+
+            # ================================
+            # 📄 PDF
+            # ================================
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer)
+            styles = getSampleStyleSheet()
+
+            story = [
+                Paragraph(f"Empresa: {dados.get('empresa','')}", styles["Normal"]),
+                Paragraph(f"Economia mensal: R$ {economia:,.2f}", styles["Normal"]),
+                Paragraph(f"Recuperável: R$ {recuperavel:,.2f}", styles["Normal"]),
+            ]
+
+            doc.build(story)
+
+            st.download_button(
+                "📄 Baixar PDF",
+                buffer.getvalue(),
+                "proposta.pdf"
+            )
+
+            # ================================
+            # 📚 HISTÓRICO
+            # ================================
+            registro = {
+                "data": str(datetime.datetime.now()),
+                "empresa": dados.get("empresa",""),
+                "cnpj": cnpj,
+                "economia": economia,
+                "recuperavel": recuperavel
+            }
+
+            if "historico" not in st.session_state:
+                st.session_state["historico"] = []
+
+            st.session_state["historico"].append(registro)
 
     # ================================
-    # 📝 OBS
+    # 📚 HISTÓRICO VISUAL
     # ================================
-    st.markdown("## 📝 Observações")
+    st.markdown("## 📚 Histórico")
 
-    obs = st.text_area("Anotações")
+    if "historico" in st.session_state:
+        st.dataframe(st.session_state["historico"])
