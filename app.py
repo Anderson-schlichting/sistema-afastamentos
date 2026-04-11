@@ -80,18 +80,25 @@ def carregar_arquivo(file):
         return pd.read_excel(file)
 
 # ================================
-# 🚀 API
+# 🚀 API CNPJ (CORRIGIDA)
 # ================================
 @st.cache_data(ttl=86400)
 def consultar_cnpj(cnpj):
     try:
         url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
         r = requests.get(url, timeout=3)
+
         if r.status_code == 200:
-            return r.json()
-    except:
+            data = r.json()
+
+            # 🔥 garante que sempre retorna dicionário válido
+            if isinstance(data, dict):
+                return data
+
         return {}
 
+    except:
+        return {}
 # ================================
 # 🔍 FILTRO
 # ================================
@@ -151,16 +158,29 @@ with aba1:
 
         df_resultado = aplicar_filtros(df_resultado, usar_sc, cidade)
 
-        # API
-        nomes = []
-        for cnpj in df_resultado[col_cnpj].unique()[:30]:
-            dados = consultar_cnpj(cnpj)
-            nomes.append((cnpj, dados.get("razao_social","")))
+        # ================================
+# 🔎 CONSULTA SEGURA API
+# ================================
+mapa_nome = {}
+mapa_cidade_api = {}
+mapa_uf = {}
 
-        mapa = dict(nomes)
-        df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa)
+for cnpj in df_resultado[col_cnpj].unique()[:30]:
+    dados = consultar_cnpj(cnpj)
 
-        st.dataframe(df_resultado)
+    if isinstance(dados, dict):
+        mapa_nome[cnpj] = dados.get("razao_social", "")
+        mapa_cidade_api[cnpj] = dados.get("municipio", "")
+        mapa_uf[cnpj] = dados.get("uf", "")
+    else:
+        mapa_nome[cnpj] = ""
+        mapa_cidade_api[cnpj] = ""
+        mapa_uf[cnpj] = ""
+
+# adiciona no dataframe
+df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa_nome)
+df_resultado["Cidade_API"] = df_resultado[col_cnpj].map(mapa_cidade_api)
+df_resultado["UF_API"] = df_resultado[col_cnpj].map(mapa_uf)
 
 # ================================
 # ABA 2
