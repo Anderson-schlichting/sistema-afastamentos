@@ -183,7 +183,7 @@ with aba1:
         st.dataframe(df, use_container_width=True)
 
 # ================================
-# 🔎 ABA 2 FINAL COMPLETA (PRO)
+# 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
 with aba2:
 
@@ -198,17 +198,17 @@ with aba2:
         PLOTLY_OK = False
 
     try:
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Image
+        from reportlab.platypus import SimpleDocTemplate, Paragraph
         from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.lib.units import inch
         PDF_OK = True
     except:
         PDF_OK = False
 
+    # ================================
+    # 💰 FORMATAÇÃO BR
+    # ================================
     def br(v):
         return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X",".")
-
-    st.subheader("🔎 Diagnóstico Comercial FAP")
 
     # ================================
     # 📡 API
@@ -218,8 +218,10 @@ with aba2:
         try:
             url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
             r = requests.get(url, timeout=5)
+
             if r.status_code == 200:
                 data = r.json()
+
                 return {
                     "empresa": data.get("razao_social",""),
                     "telefone": data.get("ddd_telefone_1",""),
@@ -230,7 +232,10 @@ with aba2:
                 }
         except:
             pass
+
         return {}
+
+    st.subheader("🔎 Diagnóstico Comercial FAP")
 
     # ================================
     # 🧠 CNPJ
@@ -241,133 +246,170 @@ with aba2:
 
     if cnpj_input:
         cnpj = ''.join(filter(str.isdigit, cnpj_input)).zfill(14)
-        dados = consultar_cnpj(cnpj)
+
+        with st.spinner("Consultando Receita..."):
+            dados = consultar_cnpj(cnpj)
 
         if dados.get("empresa"):
             st.success("Empresa encontrada")
-            st.write(f"🏢 {dados['empresa']}")
-            st.write(f"📞 {dados['telefone']}")
-            st.write(f"👥 {dados['socios']}")
-            st.write(f"📍 {dados['cidade']} - {dados['uf']}")
-            st.write(f"🏭 CNAE: {dados['cnae']}")
+
+            col1, col2 = st.columns(2)
+
+            col1.write(f"🏢 {dados['empresa']}")
+            col1.write(f"📞 {dados['telefone']}")
+            col1.write(f"👥 {dados['socios']}")
+
+            col2.write(f"📍 {dados['cidade']} - {dados['uf']}")
+            col2.write(f"🏭 CNAE: {dados['cnae']}")
+        else:
+            st.warning("CNPJ não localizado")
 
     # ================================
-    # 💰 ENTRADA
+    # 💰 ENTRADA EM R$
     # ================================
     st.markdown("## 💰 Dados Financeiros")
 
-    folha_input = st.text_input("Folha salarial mensal (R$)", "500000")
+    folha_input = st.text_input("Folha salarial mensal (R$)", "50000")
 
     def parse(valor):
-        valor = valor.replace("R$", "").replace(".", "").replace(",", ".")
+        valor = valor.replace("R$", "").replace(".", "").replace(",", ".").strip()
         try:
             return float(valor)
         except:
-            return 0
+            return 0.0
 
     folha = parse(folha_input)
-    st.write(f"💰 Interpretado: {br(folha)}")
 
+    if folha > 0:
+        st.write(f"💰 Interpretado: {br(folha)}")
+
+    # ================================
+    # 📊 PARÂMETROS
+    # ================================
     col1, col2 = st.columns(2)
-    rat = col1.number_input("RAT (%)", 1.0, 3.0, 2.0) / 100
-    fap_atual = col2.number_input("FAP atual", 0.5, 2.0, 1.5)
+
+    rat = col1.number_input("RAT (%)", min_value=1.0, max_value=3.0, value=2.0) / 100
+    fap_atual = col2.number_input("FAP atual", min_value=0.5, max_value=2.0, value=1.5)
 
     fap_ideal = max(fap_atual - 0.5, 0.5)
+
     st.info(f"FAP ideal estimado: {fap_ideal:.2f}")
+
+    rat_ajustado = rat * fap_atual
+    st.warning(f"RAT ajustado: {(rat_ajustado*100):.2f}%")
 
     ano_inicio = st.number_input("Ano início problema", 2000, 2035, 2023)
 
     # ================================
     # 📝 ANOTAÇÕES
     # ================================
-    obs = st.text_area("📝 Anotações sobre o cliente")
+    obs = st.text_area("📝 Anotações")
 
     # ================================
     # 🚀 CÁLCULO
     # ================================
     if st.button("🚀 Gerar Diagnóstico"):
 
-        hoje = datetime.datetime.now()
-        meses = (hoje.year - ano_inicio) * 12 + hoje.month
+        if folha > 0:
 
-        atual = folha * rat * fap_atual
-        correto = folha * rat * fap_ideal
-        economia = max(atual - correto, 0)
+            hoje = datetime.datetime.now()
+            meses = (hoje.year - ano_inicio) * 12 + hoje.month
 
-        recuperavel = economia * meses
-        honorarios = recuperavel * 0.20
-        mensalidade = 5000
-        total = honorarios + (mensalidade * 12)
+            atual = folha * rat * fap_atual
+            correto = folha * rat * fap_ideal
+            economia = max(atual - correto, 0)
 
-        st.markdown("## 💰 Resultado")
+            recuperavel = economia * meses
+            honorarios = recuperavel * 0.20
+            mensalidade = 5000
+            total = honorarios + (mensalidade * 12)
 
-        st.metric("Pago Atual", br(atual))
-        st.metric("Valor Correto", br(correto))
-        st.metric("Economia Mensal", br(economia))
+            st.markdown("## 💰 Resultado")
 
-        st.metric("Recuperável", br(recuperavel))
-        st.metric("Honorários", br(honorarios))
-        st.metric("Projeto Total", br(total))
+            st.metric("Pago Atual", br(atual))
+            st.metric("Valor Correto", br(correto))
+            st.metric("Economia Mensal", br(economia))
 
-        # ================================
-        # 📊 GRÁFICOS
-        # ================================
-        if PLOTLY_OK:
+            st.metric("Recuperável", br(recuperavel))
+            st.metric("Honorários", br(honorarios))
+            st.metric("Projeto Total", br(total))
 
-            meses_lista = list(range(1,13))
+            # ================================
+            # 📊 GRÁFICO
+            # ================================
+            if PLOTLY_OK:
 
-            fig = go.Figure()
-            fig.add_bar(x=meses_lista, y=[atual]*12, name="Atual", marker_color="red")
-            fig.add_bar(x=meses_lista, y=[correto]*12, name="Correto", marker_color="green")
-            fig.add_bar(x=meses_lista, y=[correto+mensalidade]*12, name="Correto + Serviço", marker_color="blue")
+                meses_lista = list(range(1, 13))
 
-            st.plotly_chart(fig)
+                fig = go.Figure()
 
-            # gráfico recuperação
-            acumulado = [economia * i for i in meses_lista]
-            fig2 = go.Figure()
-            fig2.add_scatter(x=meses_lista, y=acumulado, mode="lines+markers")
+                fig.add_bar(x=meses_lista, y=[atual]*12, name="Atual", marker_color="red")
+                fig.add_bar(x=meses_lista, y=[correto]*12, name="Correto", marker_color="green")
+                fig.add_bar(x=meses_lista, y=[correto+mensalidade]*12, name="Correto + Serviço", marker_color="blue")
 
-            st.plotly_chart(fig2)
+                fig.update_layout(title="Comparativo Mensal", barmode="group")
 
-        # ================================
-        # 📄 PDF COM GRÁFICO
-        # ================================
-        if PDF_OK and PLOTLY_OK:
+                st.plotly_chart(fig, use_container_width=True)
 
-            img_bytes = fig.to_image(format="png")
+            # ================================
+            # 📄 PROPOSTA
+            # ================================
+            proposta = f"""
+Empresa: {dados.get('empresa','')}
 
-            buffer = BytesIO()
-            doc = SimpleDocTemplate(buffer)
-            styles = getSampleStyleSheet()
+Valor atual: {br(atual)}
+Valor correto: {br(correto)}
 
-            story = [
-                Paragraph(f"Empresa: {dados.get('empresa','')}", styles["Normal"]),
-                Paragraph(f"Recuperável: {br(recuperavel)}", styles["Normal"]),
-                Paragraph(f"Honorários: {br(honorarios)}", styles["Normal"]),
-                Paragraph(f"Observações: {obs}", styles["Normal"]),
-                Image(BytesIO(img_bytes), width=400, height=200)
-            ]
+Economia mensal: {br(economia)}
+Recuperação: {br(recuperavel)}
 
-            doc.build(story)
+Honorários: {br(honorarios)}
+Mensalidade: R$ 5.000,00
 
-            st.download_button("📄 Baixar PDF", buffer.getvalue(), "proposta.pdf")
+Projeto total: {br(total)}
 
-        # ================================
-        # 📚 HISTÓRICO
-        # ================================
-        if "historico" not in st.session_state:
-            st.session_state["historico"] = []
+Observações:
+{obs}
+"""
 
-        st.session_state["historico"].append({
-            "data": str(datetime.datetime.now()),
-            "empresa": dados.get("empresa",""),
-            "cnpj": cnpj,
-            "recuperavel": br(recuperavel)
-        })
+            st.markdown("## 📄 Proposta")
+            st.text_area("Copiar proposta", proposta, height=250)
+
+            # ================================
+            # 📄 PDF (SEM ERRO)
+            # ================================
+            if PDF_OK:
+
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(buffer)
+                styles = getSampleStyleSheet()
+
+                story = [
+                    Paragraph(f"Empresa: {dados.get('empresa','')}", styles["Normal"]),
+                    Paragraph(f"Recuperável: {br(recuperavel)}", styles["Normal"]),
+                    Paragraph(f"Honorários: {br(honorarios)}", styles["Normal"]),
+                    Paragraph(f"Observações: {obs}", styles["Normal"]),
+                ]
+
+                doc.build(story)
+
+                st.download_button("📄 Baixar PDF", buffer.getvalue(), "proposta.pdf")
+
+            # ================================
+            # 📚 HISTÓRICO
+            # ================================
+            if "historico" not in st.session_state:
+                st.session_state["historico"] = []
+
+            st.session_state["historico"].append({
+                "data": str(datetime.datetime.now()),
+                "empresa": dados.get("empresa",""),
+                "cnpj": cnpj,
+                "recuperavel": br(recuperavel)
+            })
 
     # ================================
-    # 📚 VISUAL HISTÓRICO
+    # 📚 HISTÓRICO
     # ================================
     st.markdown("## 📚 Histórico")
 
