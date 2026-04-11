@@ -295,28 +295,14 @@ with aba2:
             c4.metric("Anual", f"R$ {anual:,.2f}")
             c5.metric("Recuperável (5 anos)", f"R$ {recuperavel:,.2f}")
 
-            # ================================
-            # 📊 GRÁFICO PROFISSIONAL
-            # ================================
-            grafico_df = pd.DataFrame({
-                "Categoria": ["Atual", "Correto", "Economia"],
-                "Valor": [atual, correto, economia]
-            })
+           # ================================
+# 📊 GRÁFICO SIMPLES (SEM PLOTLY)
+# ================================
+grafico_df = pd.DataFrame({
+    "Valor": [atual, correto, economia]
+}, index=["Atual", "Correto", "Economia"])
 
-            fig = px.bar(
-                grafico_df,
-                x="Categoria",
-                y="Valor",
-                color="Categoria",
-                color_discrete_map={
-                    "Atual": "red",
-                    "Correto": "green",
-                    "Economia": "blue"
-                }
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
-
+st.bar_chart(grafico_df)
             # ================================
             # 📄 PROPOSTA
             # ================================
