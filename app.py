@@ -262,28 +262,6 @@ if df_api.empty:
         use_container_width=True
     )
 
-    # ================================
-    # 📋 LEADS
-    # ================================
-    st.markdown("## 📋 Leads Prioritários")
-
-    top = ranking.head(20)
-
-    for _, row in top.iterrows():
-
-        tel = str(row["telefone"]).replace("(","").replace(")","").replace("-","").replace(" ","")
-
-        st.write(f"🏢 {row['empresa']}")
-        st.write(f"📍 {row['cidade_api']}")
-        st.write(f"👥 {row['socios']}")
-        st.write(f"📊 Afastamentos: {row['Afastamentos']}")
-
-        if tel and tel != "nan":
-            link = f"https://wa.me/55{tel}?text=Olá, identificamos oportunidades de redução no FAP da sua empresa."
-            st.markdown(f"[📲 WhatsApp]({link})")
-
-        st.divider()
-
 # ================================
 # 🔄 CONSULTA EM BLOCOS + RETRY
 # ================================
@@ -298,7 +276,7 @@ falhas = []
 cnpjs = agrupado[col_cnpj].tolist()
 total = len(cnpjs)
 
-BLOCO = 20  # você pode mudar para 30 ou 50
+BLOCO = 20
 
 def consultar_com_retry(cnpj, tentativas=2):
     for _ in range(tentativas):
@@ -315,7 +293,7 @@ for i in range(0, total, BLOCO):
 
     bloco = cnpjs[i:i+BLOCO]
 
-    status.markdown(f"### 🔄 Processando lote {int(i/BLOCO)+1}")
+    status.markdown(f"### 🔄 Lote {int(i/BLOCO)+1}")
 
     for cnpj in bloco:
 
@@ -336,40 +314,64 @@ if falhas:
     st.warning(f"🔁 Reprocessando {len(falhas)} falhas...")
 
     for cnpj in falhas:
-
         dados = consultar_com_retry(cnpj, tentativas=3)
 
         if dados:
             dados_lista.append({"CNPJ": cnpj, **dados})
 
 # ================================
-# 📊 FINAL
+# 📊 FINAL API
 # ================================
 df_api = pd.DataFrame(dados_lista)
 
-        if df_api.empty:
-            st.error("Nenhuma empresa encontrada")
-            st.stop()
+if df_api.empty:
+    st.error("Nenhuma empresa encontrada")
+    st.stop()
 
-        df = df.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
+# ================================
+# 🔗 MERGE FINAL
+# ================================
+final = agrupado.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
 
-        df["cidade_api"] = df["cidade_api"].astype(str).str.upper()
-        df["cidade"] = df["cidade"].astype(str).str.upper()
+# ================================
+# 📊 RANKING FINAL
+# ================================
+ranking = final.sort_values("Afastamentos", ascending=False)
 
-        df = df[
-            (df["uf"] == "SC") |
-            (df["cidade_api"].isin(CIDADES_SC)) |
-            (df["cidade"].isin(CIDADES_SC))
-        ]
+st.markdown("## 📊 Ranking Final")
+st.dataframe(
+    ranking[[
+        col_cnpj,
+        "empresa",
+        "telefone",
+        "socios",
+        "cidade_api",
+        "Afastamentos"
+    ]],
+    use_container_width=True
+)
 
-        if df.empty:
-            st.warning("Nenhuma empresa de SC encontrada")
-            st.stop()
+# ================================
+# 📋 LEADS (AGORA SIM NO LUGAR CERTO)
+# ================================
+st.markdown("## 📋 Leads Prioritários")
 
-        ranking = df["cidade_api"].value_counts().reset_index()
-        ranking.columns = ["Cidade", "Empresas"]
+top = ranking.head(20)
 
-        st.dataframe(ranking)
+for _, row in top.iterrows():
+
+    tel = str(row["telefone"]).replace("(","").replace(")","").replace("-","").replace(" ","")
+
+    st.write(f"🏢 {row['empresa']}")
+    st.write(f"📍 {row['cidade_api']}")
+    st.write(f"👥 {row['socios']}")
+    st.write(f"📊 Afastamentos: {row['Afastamentos']}")
+
+    if tel and tel != "nan":
+        link = f"https://wa.me/55{tel}?text=Olá, identificamos oportunidades de redução no FAP da sua empresa."
+        st.markdown(f"[📲 WhatsApp]({link})")
+
+    st.divider()
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
