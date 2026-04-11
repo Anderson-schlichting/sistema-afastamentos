@@ -98,7 +98,8 @@ CIDADES_SC = [
     "CRICIÚMA","RIO DO SUL","JARAGUÁ DO SUL","PALHOÇA"
 ]
 
-file = st.file_uploader("Envie CSV ou Excel")
+if True:
+    file = st.file_uploader("Envie CSV ou Excel")
 
 def carregar_arquivo(file):
     try:
