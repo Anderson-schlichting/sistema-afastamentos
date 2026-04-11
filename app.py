@@ -5,82 +5,36 @@ import time
 
 st.set_page_config(layout="wide")
 
-# ================================
-# 📍 CIDADES SC (COMPLETO)
-# ================================
-CIDADES_SC = [
-"ABDON BATISTA","ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA DOCE","ÁGUAS DE CHAPECÓ",
-"ÁGUAS FRIAS","ÁGUAS MORNAS","ALFREDO WAGNER","ALTO BELA VISTA","ANCHIETA","ANGELINA",
-"ANITA GARIBALDI","ANITÁPOLIS","ANTÔNIO CARLOS","APIÚNA","ARABUTÃ","ARAQUARI","ARARANGUÁ",
-"ARMAZÉM","ARROIO TRINTA","ARVOREDO","ASCURRA","ATALANTA","AURORA","BALNEÁRIO ARROIO DO SILVA",
-"BALNEÁRIO BARRA DO SUL","BALNEÁRIO CAMBORIÚ","BALNEÁRIO GAIVOTA","BANDEIRANTE","BARRA BONITA",
-"BARRA VELHA","BELA VISTA DO TOLDO","BELMONTE","BENEDITO NOVO","BIGUAÇU","BLUMENAU","BOCAINA DO SUL",
-"BOMBINHAS","BOM JARDIM DA SERRA","BOM JESUS","BOM JESUS DO OESTE","BOM RETIRO",
-"BOTUVERÁ","BRAÇO DO NORTE","BRAÇO DO TROMBUDO","BRUNÓPOLIS","BRUSQUE","CAÇADOR","CAIBI",
-"CALMON","CAMBORIÚ","CAMPO ALEGRE","CAMPO BELO DO SUL","CAMPO ERÊ","CAMPOS NOVOS",
-"CANELINHA","CANOINHAS","CAPÃO ALTO","CAPINZAL","CAPIVARI DE BAIXO","CATANDUVAS",
-"CAXAMBU DO SUL","CELSO RAMOS","CERRO NEGRO","CHAPADÃO DO LAGEADO","CHAPECÓ",
-"COCAL DO SUL","CONCÓRDIA","CORDILHEIRA ALTA","CORONEL FREITAS","CORONEL MARTINS",
-"CORREIA PINTO","CORUPÁ","CRICIÚMA","CUNHA PORÃ","CUNHATAÍ","CURITIBANOS",
-"DESCANSO","DIONÍSIO CERQUEIRA","DONA EMMA","DOUTOR PEDRINHO","ENTRE RIOS",
-"ERMO","ERVAL VELHO","FAXINAL DOS GUEDES","FLOR DO SERTÃO","FLORIANÓPOLIS",
-"FORMOSA DO SUL","FORQUILHINHA","FRAIBURGO","FREI ROGÉRIO","GALVÃO",
-"GAROPABA","GARUVA","GASPAR","GOVERNADOR CELSO RAMOS","GRÃO PARÁ",
-"GRAVATAL","GUABIRUBA","GUARACIABA","GUARAMIRIM","GUARUJÁ DO SUL",
-"GUATAMBÚ","HERVAL D'OESTE","IBIAM","IBICARÉ","IBIRAMA","IÇARA",
-"ILHOTA","IMARUÍ","IMBITUBA","IMBUIA","INDAIAL","IOMERÊ","IPIRA",
-"IPORÃ DO OESTE","IPUAÇU","IPUMIRIM","IRACEMINHA","IRANI","IRATI",
-"IRINEÓPOLIS","ITÁ","ITAJAÍ","ITAPEMA","ITAPIRANGA","ITAPOÁ",
-"ITUPORANGA","JABORÁ","JACINTO MACHADO","JAGUARUNA","JARAGUÁ DO SUL",
-"JARDINÓPOLIS","JOAÇABA","JOINVILLE","JOSÉ BOITEUX","JUPIÁ",
-"LACERDÓPOLIS","LAGES","LAGUNA","LAURENTINO","LAURO MÜLLER",
-"LEBON RÉGIS","LEOBERTO LEAL","LINDÓIA DO SUL","LONTRAS","LUIZ ALVES",
-"LUZERNA","MACIEIRA","MAFRA","MAJOR GERCINO","MAJOR VIEIRA",
-"MARACAJÁ","MARAVILHA","MAREMA","MASSARANDUBA","MATOS COSTA",
-"MELEIRO","MIRIM DOCE","MODELO","MONDAÍ","MONTE CARLO",
-"MONTE CASTELO","MORRO DA FUMAÇA","MORRO GRANDE","NAVEGANTES",
-"NOVA ERECHIM","NOVA ITABERABA","NOVA TRENTO","NOVA VENEZA",
-"NOVO HORIZONTE","ORLEANS","OTACÍLIO COSTA","OURO","OURO VERDE",
-"PAIAL","PAINEL","PALHOÇA","PALMA SOLA","PALMEIRA","PALMITOS",
-"PAPANDUVA","PARAÍSO","PASSO DE TORRES","PASSOS MAIA","PAULO LOPES",
-"PEDRAS GRANDES","PENHA","PERITIBA","PESCARIA BRAVA","PETROLÂNDIA",
-"PINHALZINHO","PINHEIRO PRETO","PIRATUBA","PLANALTO ALEGRE","POMERODE",
-"PONTE ALTA","PONTE ALTA DO NORTE","PONTE SERRADA","PORTO BELO",
-"PORTO UNIÃO","POUSO REDONDO","PRAIA GRANDE","PRESIDENTE CASTELLO BRANCO",
-"PRESIDENTE GETÚLIO","PRESIDENTE NEREU","PRINCESA","QUILOMBO",
-"RANCHO QUEIMADO","RIO DAS ANTAS","RIO DO CAMPO","RIO DO OESTE",
-"RIO DO SUL","RIO DOS CEDROS","RIO FORTUNA","RIO NEGRINHO",
-"RIO RUFINO","RIQUEZA","RODEIO","ROMELÂNDIA","SALETE",
-"SALTINHO","SALTO VELOSO","SANGÃO","SANTA CECÍLIA","SANTA HELENA",
-"SANTA ROSA DE LIMA","SANTA ROSA DO SUL","SANTA TEREZINHA",
-"SANTA TEREZINHA DO PROGRESSO","SANTIAGO DO SUL","SANTO AMARO DA IMPERATRIZ",
-"SÃO BENTO DO SUL","SÃO BERNARDINO","SÃO BONIFÁCIO","SÃO CARLOS",
-"SÃO CRISTÓVÃO DO SUL","SÃO DOMINGOS","SÃO FRANCISCO DO SUL",
-"SÃO JOÃO BATISTA","SÃO JOÃO DO ITAPERIÚ","SÃO JOÃO DO OESTE",
-"SÃO JOÃO DO SUL","SÃO JOAQUIM","SÃO JOSÉ","SÃO JOSÉ DO CEDRO",
-"SÃO JOSÉ DO CERRITO","SÃO LOURENÇO DO OESTE","SÃO LUDGERO",
-"SÃO MARTINHO","SÃO MIGUEL DA BOA VISTA","SÃO MIGUEL DO OESTE",
-"SÃO PEDRO DE ALCÂNTARA","SAUDADES","SCHROEDER","SEARA",
-"SERRA ALTA","SIDERÓPOLIS","SOMBRIO","SUL BRASIL","TAIÓ",
-"TANGARÁ","TIGRINHOS","TIJUCAS","TIMBÉ DO SUL","TIMBÓ",
-"TIMBÓ GRANDE","TRÊS BARRAS","TREVISO","TREZE DE MAIO",
-"TREZE TÍLIAS","TROMBUDO CENTRAL","TUBARÃO","TUNÁPOLIS",
-"TURVO","UNIÃO DO OESTE","URUBICI","URUPEMA","URUSSANGA",
-"VARGEÃO","VARGEM","VARGEM BONITA","VIDAL RAMOS","VIDEIRA",
-"VITOR MEIRELES","WITMARSUM","XANXERÊ","XAVANTINA","XAXIM","ZORTÉA"
-]
+st.title("📊 Sistema Inteligente de Empresas + FAP")
 
 # ================================
-# 📂 LEITURA CSV
+# 📍 CIDADES SC (RESUMIDA)
+# ================================
+CIDADES_SC = ["BLUMENAU","JOINVILLE","FLORIANÓPOLIS","CHAPECÓ","ITAJAÍ","LAGES","CRICIÚMA"]
+
+# ================================
+# 📂 LEITURA INTELIGENTE
 # ================================
 def carregar_arquivo(file):
     try:
-        return pd.read_csv(file, sep=';', encoding='latin1')
+        if file.name.endswith(".csv"):
+            return pd.read_csv(file, sep=';', encoding='latin1')
+        else:
+            return pd.read_excel(file)
     except:
-        return pd.read_excel(file)
+        return None
 
 # ================================
-# 🚀 API CNPJ (CORRIGIDA)
+# 🔎 DETECTAR COLUNA CNPJ
+# ================================
+def detectar_cnpj(df):
+    for col in df.columns:
+        if "CNPJ" in col.upper():
+            return col
+    return None
+
+# ================================
+# 🚀 API RECEITA
 # ================================
 @st.cache_data(ttl=86400)
 def consultar_cnpj(cnpj):
@@ -89,115 +43,155 @@ def consultar_cnpj(cnpj):
         r = requests.get(url, timeout=3)
 
         if r.status_code == 200:
-            data = r.json()
-
-            # 🔥 garante que sempre retorna dicionário válido
-            if isinstance(data, dict):
-                return data
-
-        return {}
-
+            return r.json()
     except:
-        return {}
-# ================================
-# 🔍 FILTRO
-# ================================
-def aplicar_filtros(df, usar_sc=False, cidade=None):
-    df = df.copy()
+        pass
 
-    col_cidade = None
-    col_estado = None
-
-    for c in df.columns:
-        if "CIDADE" in c.upper() or "MUNICIP" in c.upper():
-            col_cidade = c
-        if "ESTADO" in c.upper() or "UF" in c.upper():
-            col_estado = c
-
-    if usar_sc and col_estado:
-        df = df[df[col_estado].astype(str).str.upper().str.contains("SC|SANTA CATARINA", na=False)]
-
-    if cidade != "Todas" and col_cidade:
-        df[col_cidade] = df[col_cidade].astype(str).str.upper().str.strip()
-        df = df[df[col_cidade] == cidade]
-
-    return df
+    return {}
 
 # ================================
-# APP
+# 📊 CALCULO FAP
 # ================================
-st.title("📊 Sistema Inteligente + FAP")
-
-aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta"])
+def calcular_fap(qtd):
+    if qtd <= 2:
+        return 0.5
+    elif qtd <= 5:
+        return 1.0
+    elif qtd <= 10:
+        return 1.5
+    else:
+        return 2.0
 
 # ================================
-# ABA 1
+# 📊 ABAS
+# ================================
+aba1, aba2 = st.tabs(["📊 Processamento", "🔎 Consulta CNPJ"])
+
+# ================================
+# 📊 ABA 1
 # ================================
 with aba1:
 
-    file = st.file_uploader("Envie CSV ou Excel")
+    file = st.file_uploader("Envie sua planilha (CSV ou Excel)")
 
-    if file and st.button("Processar"):
+    if file:
 
-        df = carregar_arquivo(file)
+        if st.button("🚀 Processar Dados"):
 
-        if df is None:
-            st.error("Erro ao ler arquivo")
-            st.stop()
+            with st.spinner("Processando dados..."):
 
-        df.columns = df.columns.str.strip()
+                df = carregar_arquivo(file)
 
-        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
+                if df is None:
+                    st.error("Erro ao ler arquivo")
+                    st.stop()
 
-        df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r'\D','',regex=True)
+                df.columns = df.columns.astype(str).str.strip()
 
-        df_resultado = df[df[col_cnpj].duplicated(keep=False)]
+                col_cnpj = detectar_cnpj(df)
 
-        usar_sc = st.checkbox("Apenas SC")
-        cidade = st.selectbox("Cidade", ["Todas"] + CIDADES_SC)
+                if not col_cnpj:
+                    st.error("Coluna CNPJ não encontrada")
+                    st.stop()
 
-        df_resultado = aplicar_filtros(df_resultado, usar_sc, cidade)
+                # normalizar CNPJ
+                df[col_cnpj] = (
+                    df[col_cnpj]
+                    .astype(str)
+                    .str.replace(r'\D','',regex=True)
+                    .str.zfill(14)
+                )
 
-        # ================================
-# 🔎 CONSULTA SEGURA API
+                # duplicados
+                df_resultado = df[df[col_cnpj].duplicated(keep=False)]
+
+                # ====================
+                # CONSULTA API
+                # ====================
+                mapa = []
+
+                for cnpj in df_resultado[col_cnpj].unique()[:50]:
+
+                    dados = consultar_cnpj(cnpj)
+
+                    mapa.append({
+                        "CNPJ": cnpj,
+                        "Empresa": dados.get("razao_social",""),
+                        "Fantasia": dados.get("nome_fantasia",""),
+                        "Telefone": dados.get("ddd_telefone_1",""),
+                        "Cidade": dados.get("municipio",""),
+                        "UF": dados.get("uf","")
+                    })
+
+                df_api = pd.DataFrame(mapa)
+
+                df_resultado = df_resultado.merge(
+                    df_api, left_on=col_cnpj, right_on="CNPJ", how="left"
+                )
+
+                # ====================
+                # FILTRO SC
+                # ====================
+                df_resultado["SC"] = df_resultado["UF"] == "SC"
+
+                # ====================
+                # RANKING + FAP
+                # ====================
+                ranking = (
+                    df_resultado.groupby(["CNPJ","Empresa"])
+                    .size()
+                    .reset_index(name="Afastamentos")
+                )
+
+                ranking["FAP"] = ranking["Afastamentos"].apply(calcular_fap)
+
+                # ====================
+                # DASHBOARD
+                # ====================
+                st.success("Processamento concluído")
+
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Empresas", ranking.shape[0])
+                c2.metric("Registros", df_resultado.shape[0])
+                c3.metric("SC", df_resultado["SC"].sum())
+
+                st.markdown("## 📊 Ranking + FAP")
+                st.dataframe(ranking, use_container_width=True)
+
+                st.markdown("## 📋 Dados Completos")
+                st.dataframe(df_resultado, use_container_width=True)
+
 # ================================
-mapa_nome = {}
-mapa_cidade_api = {}
-mapa_uf = {}
-
-for cnpj in df_resultado[col_cnpj].unique()[:30]:
-    dados = consultar_cnpj(cnpj)
-
-    if isinstance(dados, dict):
-        mapa_nome[cnpj] = dados.get("razao_social", "")
-        mapa_cidade_api[cnpj] = dados.get("municipio", "")
-        mapa_uf[cnpj] = dados.get("uf", "")
-    else:
-        mapa_nome[cnpj] = ""
-        mapa_cidade_api[cnpj] = ""
-        mapa_uf[cnpj] = ""
-
-# adiciona no dataframe
-df_resultado["Empresa"] = df_resultado[col_cnpj].map(mapa_nome)
-df_resultado["Cidade_API"] = df_resultado[col_cnpj].map(mapa_cidade_api)
-df_resultado["UF_API"] = df_resultado[col_cnpj].map(mapa_uf)
-
-# ================================
-# ABA 2
+# 🔎 ABA 2
 # ================================
 with aba2:
 
-    cnpj = st.text_input("Digite o CNPJ")
+    st.subheader("Consulta individual de CNPJ")
 
-    if cnpj:
+    cnpj_input = st.text_input("Digite o CNPJ")
 
-        cnpj = ''.join(filter(str.isdigit, cnpj)).zfill(14)
+    if cnpj_input:
+
+        cnpj = ''.join(filter(str.isdigit, cnpj_input)).zfill(14)
 
         dados = consultar_cnpj(cnpj)
 
         if dados:
-            st.write("Empresa:", dados.get("razao_social"))
-            st.write("Cidade:", dados.get("municipio"))
-            st.write("UF:", dados.get("uf"))
+
+            st.success("Empresa encontrada")
+
+            col1, col2 = st.columns(2)
+
+            col1.write(f"Empresa: {dados.get('razao_social','')}")
+            col1.write(f"Fantasia: {dados.get('nome_fantasia','')}")
+            col1.write(f"Telefone: {dados.get('ddd_telefone_1','')}")
+
+            col2.write(f"Cidade: {dados.get('municipio','')}")
+            col2.write(f"UF: {dados.get('uf','')}")
+
+            # FAP simulado
+            st.markdown("### 📊 FAP Estimado")
+            st.success("FAP base: 1.0 (simulado)")
+
         else:
             st.error("CNPJ não encontrado")
