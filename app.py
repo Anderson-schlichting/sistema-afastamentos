@@ -329,9 +329,19 @@ if df_api.empty:
     st.stop()
 
 # ================================
-# 🔗 MERGE FINAL
+# 🔗 MERGE FINAL (ALINHADO CORRETO)
 # ================================
-final = agrupado.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
+final = agrupado.merge(
+    df_api,
+    left_on=col_cnpj,
+    right_on="CNPJ",
+    how="inner"
+)
+
+# ================================
+# 📊 RANKING FINAL
+# ================================
+ranking = final.sort_values("Afastamentos", ascending=False)
 
 # ================================
 # 📊 RANKING FINAL
