@@ -19,7 +19,10 @@ with aba1:
 
     st.subheader("📊 Prospecção Inteligente - SC")
 
-    CIDADES_SC = [
+# ================================
+# 📍 LISTA SC (FALLBACK)
+# ================================
+CIDADES_SC = list(set([
 "ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA DOCE","ÁGUAS DE CHAPECÓ",
 "ÁGUAS FRIAS","ÁGUAS MORNAS","ALFREDO WAGNER","ALTO BELA VISTA",
 "ANCHIETA","ANGELINA","ANITA GARIBALDI","ANITÁPOLIS","ANTÔNIO CARLOS",
@@ -86,49 +89,64 @@ with aba1:
 "URUPEMA","URUSSANGA","VARGEÃO","VARGEM","VARGEM BONITA",
 "VIDAL RAMOS","VIDEIRA","VITOR MEIRELES","WITMARSUM","XANXERÊ",
 "XAVANTINA","XAXIM","ZORTÉA"
-]
+]))
 
-    file = st.file_uploader("Envie CSV ou Excel")
+file = st.file_uploader("Envie CSV ou Excel")
 
-    def carregar_arquivo(file):
-        try:
-            if file.name.endswith(".csv"):
-                return pd.read_csv(file, sep=';', encoding='latin1')
-            return pd.read_excel(file)
-        except:
-            return None
-
-    def detectar_cnpj(df):
-        for c in df.columns:
-            if "CNPJ" in c.upper():
-                return c
+# ================================
+# 📂 LEITURA
+# ================================
+def carregar_arquivo(file):
+    try:
+        if file.name.endswith(".csv"):
+            return pd.read_csv(file, sep=';', encoding='latin1')
+        return pd.read_excel(file)
+    except:
         return None
 
-    def limpar_cidade(valor):
-        if pd.isna(valor):
-            return ""
-        valor = str(valor)
-        if "-" in valor:
-            valor = valor.split("-", 1)[1]
-        return valor.strip().upper()
+# ================================
+# 🔎 CNPJ
+# ================================
+def detectar_cnpj(df):
+    for c in df.columns:
+        if "CNPJ" in c.upper():
+            return c
+    return None
 
-    @st.cache_data(ttl=86400)
-    def consultar_cnpj(cnpj):
-        try:
-            r = requests.get(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}", timeout=3)
-            if r.status_code == 200:
-                data = r.json()
-                return {
-                    "empresa": data.get("razao_social",""),
-                    "telefone": data.get("ddd_telefone_1",""),
-                    "cidade_api": data.get("municipio",""),
-                    "uf": data.get("uf",""),
-                    "socios": ", ".join([q.get("nome_socio","") for q in data.get("qsa",[])])
-                }
-        except:
-            pass
-        return {}
+# ================================
+# 🧠 LIMPAR CIDADE
+# ================================
+def limpar_cidade(valor):
+    if pd.isna(valor):
+        return ""
+    valor = str(valor)
+    if "-" in valor:
+        valor = valor.split("-", 1)[1]
+    return valor.strip().upper()
 
+# ================================
+# 📡 API RECEITA
+# ================================
+@st.cache_data(ttl=86400)
+def consultar_cnpj(cnpj):
+    try:
+        r = requests.get(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}", timeout=3)
+        if r.status_code == 200:
+            data = r.json()
+            return {
+                "empresa": data.get("razao_social",""),
+                "telefone": data.get("ddd_telefone_1",""),
+                "cidade_api": data.get("municipio",""),
+                "uf": data.get("uf",""),
+                "socios": ", ".join([q.get("nome_socio","") for q in data.get("qsa",[])])
+            }
+    except:
+        pass
+    return {}
+
+# ================================
+# 🚀 PROCESSAMENTO
+# ================================
 if file and st.button("🚀 Processar"):
 
     df = carregar_arquivo(file)
@@ -145,18 +163,14 @@ if file and st.button("🚀 Processar"):
         st.error("Coluna CNPJ não encontrada")
         st.stop()
 
-    # ================================
-    # 🧾 NORMALIZAR CNPJ
-    # ================================
+    # limpar CNPJ
     df[col_cnpj] = (
         df[col_cnpj].astype(str)
         .str.replace(r"\D","",regex=True)
         .str.zfill(14)
     )
 
-    # ================================
-    # 📍 IDENTIFICAR CIDADE (CSV)
-    # ================================
+    # detectar cidade
     col_cidade = None
     for c in df.columns:
         if "MUNIC" in c.upper() or "CIDADE" in c.upper():
@@ -170,24 +184,20 @@ if file and st.button("🚀 Processar"):
 
     df["cidade"] = df["cidade"].astype(str).str.upper()
 
-    # ================================
-    # 📍 FILTRAR SC (ANTES DA API)
-    # ================================
+    # filtro inicial SC (rápido)
     df = df[df["cidade"].isin(CIDADES_SC)]
 
     if df.empty:
         st.warning("Nenhuma empresa de SC encontrada na base")
         st.stop()
 
-    st.success(f"{len(df)} registros em SC encontrados")
+    st.success(f"{len(df)} registros encontrados em SC")
 
-    # ================================
-    # 📊 AGRUPAR AFASTAMENTOS
-    # ================================
+    # agrupar afastamentos
     agrupado = df.groupby(col_cnpj).size().reset_index(name="Afastamentos")
 
     # ================================
-    # 🔄 CONSULTA COM RETRY (3x)
+    # 🔄 CONSULTA EM BLOCOS
     # ================================
     st.markdown("## 🔄 Consultando Receita...")
 
@@ -199,57 +209,80 @@ if file and st.button("🚀 Processar"):
 
     cnpjs = agrupado[col_cnpj].tolist()
     total = len(cnpjs)
+    BLOCO = 20
 
-    def consultar_com_retry(cnpj, tentativas=3):
-        for i in range(tentativas):
+    def consultar_com_retry(cnpj, tentativas=2):
+        for _ in range(tentativas):
             dados = consultar_cnpj(cnpj)
             if dados.get("empresa"):
                 return dados
-            time.sleep(1)
+            time.sleep(0.5)
         return None
 
-    # 🔎 PRIMEIRA PASSADA
-    for i, cnpj in enumerate(cnpjs):
+    for i in range(0, total, BLOCO):
 
-        pct = int(((i+1)/total)*100)
-        progress.progress(pct)
-        status.markdown(f"### 🔄 {pct}%")
+        bloco = cnpjs[i:i+BLOCO]
+        status.markdown(f"### 🔄 Lote {int(i/BLOCO)+1}")
 
-        dados = consultar_com_retry(cnpj)
+        for cnpj in bloco:
 
-        if dados:
-            dados_lista.append({"CNPJ": cnpj, **dados})
-        else:
-            falhas.append(cnpj)
+            dados = consultar_com_retry(cnpj)
 
-    # 🔁 SEGUNDA PASSADA (FALHAS)
+            if dados:
+                dados_lista.append({"CNPJ": cnpj, **dados})
+            else:
+                falhas.append(cnpj)
+
+        progresso = int((min(i+BLOCO, total) / total) * 100)
+        progress.progress(progresso)
+
+    # retry falhas
     if falhas:
-        st.warning(f"Tentando novamente {len(falhas)} CNPJs...")
+        st.warning(f"🔁 Reprocessando {len(falhas)} falhas...")
 
         for cnpj in falhas:
-            dados = consultar_com_retry(cnpj)
+            dados = consultar_com_retry(cnpj, tentativas=3)
 
             if dados:
                 dados_lista.append({"CNPJ": cnpj, **dados})
 
     df_api = pd.DataFrame(dados_lista)
 
-if df_api.empty:
+    if df_api.empty:
         st.error("Nenhuma empresa validada na Receita")
         st.stop()
 
     # ================================
+    # 📍 FILTRO SC FINAL (API)
+    # ================================
+    df_api["cidade_api"] = df_api["cidade_api"].fillna("").astype(str).str.upper()
+    df_api["uf"] = df_api["uf"].fillna("").astype(str).str.upper()
+
+    df_api = df_api[
+        (df_api["uf"] == "SC") |
+        (df_api["cidade_api"].isin(CIDADES_SC))
+    ]
+
+    # ================================
     # 🔗 MERGE FINAL
     # ================================
-    final = agrupado.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
+    final = agrupado.merge(
+        df_api,
+        left_on=col_cnpj,
+        right_on="CNPJ",
+        how="inner"
+    )
 
-    # ================================
-    # 📊 RANKING FINAL
-    # ================================
+    if final.empty:
+        st.warning("Nenhuma empresa SC validada na Receita")
+        st.stop()
+
     ranking = final.sort_values("Afastamentos", ascending=False)
 
+    # ================================
+    # 📊 RANKING
+    # ================================
     st.markdown("## 📊 Ranking Final")
-
     st.dataframe(
         ranking[[
             col_cnpj,
@@ -262,126 +295,25 @@ if df_api.empty:
         use_container_width=True
     )
 
-# ================================
-# 🔄 CONSULTA EM BLOCOS + RETRY
-# ================================
-st.markdown("## 🔄 Consultando Receita (modo otimizado)...")
+    # ================================
+    # 📋 LEADS
+    # ================================
+    st.markdown("## 📋 Leads Prioritários")
 
-progress = st.progress(0)
-status = st.empty()
+    for _, row in ranking.head(20).iterrows():
 
-dados_lista = []
-falhas = []
+        tel = str(row["telefone"]).replace("(","").replace(")","").replace("-","").replace(" ","")
 
-cnpjs = agrupado[col_cnpj].tolist()
-total = len(cnpjs)
+        st.write(f"🏢 {row['empresa']}")
+        st.write(f"📍 {row['cidade_api']}")
+        st.write(f"👥 {row['socios']}")
+        st.write(f"📊 Afastamentos: {row['Afastamentos']}")
 
-BLOCO = 20
+        if tel and tel != "nan":
+            link = f"https://wa.me/55{tel}?text=Olá, identificamos oportunidades de redução no FAP da sua empresa."
+            st.markdown(f"[📲 WhatsApp]({link})")
 
-def consultar_com_retry(cnpj, tentativas=2):
-    for _ in range(tentativas):
-        dados = consultar_cnpj(cnpj)
-        if dados.get("empresa"):
-            return dados
-        time.sleep(0.5)
-    return None
-
-# ================================
-# 🚀 PROCESSAMENTO EM BLOCOS
-# ================================
-for i in range(0, total, BLOCO):
-
-    bloco = cnpjs[i:i+BLOCO]
-
-    status.markdown(f"### 🔄 Lote {int(i/BLOCO)+1}")
-
-    for cnpj in bloco:
-
-        dados = consultar_com_retry(cnpj)
-
-        if dados:
-            dados_lista.append({"CNPJ": cnpj, **dados})
-        else:
-            falhas.append(cnpj)
-
-    progresso = int((min(i+BLOCO, total) / total) * 100)
-    progress.progress(progresso)
-
-# ================================
-# 🔁 REPROCESSAR FALHAS
-# ================================
-if falhas:
-    st.warning(f"🔁 Reprocessando {len(falhas)} falhas...")
-
-    for cnpj in falhas:
-        dados = consultar_com_retry(cnpj, tentativas=3)
-
-        if dados:
-            dados_lista.append({"CNPJ": cnpj, **dados})
-
-# ================================
-# 📊 FINAL API
-# ================================
-df_api = pd.DataFrame(dados_lista)
-
-if df_api.empty:
-    st.error("Nenhuma empresa encontrada")
-    st.stop()
-
-# ================================
-# 🔗 MERGE FINAL (ALINHADO CORRETO)
-# ================================
-final = agrupado.merge(
-    df_api,
-    left_on=col_cnpj,
-    right_on="CNPJ",
-    how="inner"
-)
-
-# ================================
-# 📊 RANKING FINAL
-# ================================
-ranking = final.sort_values("Afastamentos", ascending=False)
-
-# ================================
-# 📊 RANKING FINAL
-# ================================
-ranking = final.sort_values("Afastamentos", ascending=False)
-
-st.markdown("## 📊 Ranking Final")
-st.dataframe(
-    ranking[[
-        col_cnpj,
-        "empresa",
-        "telefone",
-        "socios",
-        "cidade_api",
-        "Afastamentos"
-    ]],
-    use_container_width=True
-)
-
-# ================================
-# 📋 LEADS (AGORA SIM NO LUGAR CERTO)
-# ================================
-st.markdown("## 📋 Leads Prioritários")
-
-top = ranking.head(20)
-
-for _, row in top.iterrows():
-
-    tel = str(row["telefone"]).replace("(","").replace(")","").replace("-","").replace(" ","")
-
-    st.write(f"🏢 {row['empresa']}")
-    st.write(f"📍 {row['cidade_api']}")
-    st.write(f"👥 {row['socios']}")
-    st.write(f"📊 Afastamentos: {row['Afastamentos']}")
-
-    if tel and tel != "nan":
-        link = f"https://wa.me/55{tel}?text=Olá, identificamos oportunidades de redução no FAP da sua empresa."
-        st.markdown(f"[📲 WhatsApp]({link})")
-
-    st.divider()
+        st.divider()
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
