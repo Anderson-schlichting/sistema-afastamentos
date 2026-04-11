@@ -284,27 +284,68 @@ if file and st.button("🚀 Processar"):
 
         st.divider()
 
-        st.markdown("## 🔄 Processando...")
+# ================================
+# 🔄 CONSULTA EM BLOCOS + RETRY
+# ================================
+st.markdown("## 🔄 Consultando Receita (modo otimizado)...")
 
-        progress = st.progress(0)
-        status = st.empty()
+progress = st.progress(0)
+status = st.empty()
 
-        dados_lista = []
-        cnpjs = df[col_cnpj].unique()
-        total = len(cnpjs)
+dados_lista = []
+falhas = []
 
-        for i, cnpj in enumerate(cnpjs):
+cnpjs = agrupado[col_cnpj].tolist()
+total = len(cnpjs)
 
-            pct = int(((i+1)/total)*100)
-            progress.progress(pct)
-            status.markdown(f"### 🔄 {pct}%")
+BLOCO = 20  # você pode mudar para 30 ou 50
 
-            dados = consultar_cnpj(cnpj)
+def consultar_com_retry(cnpj, tentativas=2):
+    for _ in range(tentativas):
+        dados = consultar_cnpj(cnpj)
+        if dados.get("empresa"):
+            return dados
+        time.sleep(0.5)
+    return None
 
-            if dados.get("empresa"):
-                dados_lista.append({"CNPJ": cnpj, **dados})
+# ================================
+# 🚀 PROCESSAMENTO EM BLOCOS
+# ================================
+for i in range(0, total, BLOCO):
 
-        df_api = pd.DataFrame(dados_lista)
+    bloco = cnpjs[i:i+BLOCO]
+
+    status.markdown(f"### 🔄 Processando lote {int(i/BLOCO)+1}")
+
+    for cnpj in bloco:
+
+        dados = consultar_com_retry(cnpj)
+
+        if dados:
+            dados_lista.append({"CNPJ": cnpj, **dados})
+        else:
+            falhas.append(cnpj)
+
+    progresso = int((min(i+BLOCO, total) / total) * 100)
+    progress.progress(progresso)
+
+# ================================
+# 🔁 REPROCESSAR FALHAS
+# ================================
+if falhas:
+    st.warning(f"🔁 Reprocessando {len(falhas)} falhas...")
+
+    for cnpj in falhas:
+
+        dados = consultar_com_retry(cnpj, tentativas=3)
+
+        if dados:
+            dados_lista.append({"CNPJ": cnpj, **dados})
+
+# ================================
+# 📊 FINAL
+# ================================
+df_api = pd.DataFrame(dados_lista)
 
         if df_api.empty:
             st.error("Nenhuma empresa encontrada")
