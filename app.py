@@ -234,7 +234,7 @@ if file and st.button("🚀 Processar"):
 
     df_api = pd.DataFrame(dados_lista)
 
-    if df_api.empty:
+if df_api.empty:
         st.error("Nenhuma empresa validada na Receita")
         st.stop()
 
