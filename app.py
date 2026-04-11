@@ -183,7 +183,7 @@ with aba1:
         st.dataframe(df, use_container_width=True)
 
 # ================================
-# 🔎 ABA 2 FINAL COMPLETA AJUSTADA
+# 🔎 ABA 2 FINAL DEFINITIVA
 # ================================
 with aba2:
 
@@ -203,6 +203,9 @@ with aba2:
         PDF_OK = True
     except:
         PDF_OK = False
+
+    def br(valor):
+        return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X",".")
 
     st.subheader("🔎 Diagnóstico Comercial FAP")
 
@@ -235,59 +238,55 @@ with aba2:
     # 🧠 CNPJ
     # ================================
     cnpj_input = st.text_input("Digite o CNPJ")
+
     dados = {}
     cnpj = ""
 
     if cnpj_input:
         cnpj = ''.join(filter(str.isdigit, cnpj_input)).zfill(14)
-
-        with st.spinner("Consultando Receita..."):
-            dados = consultar_cnpj(cnpj)
+        dados = consultar_cnpj(cnpj)
 
         if dados.get("empresa"):
             st.success("Empresa encontrada")
-
-            col1, col2 = st.columns(2)
-
-            col1.write(f"🏢 {dados['empresa']}")
-            col1.write(f"📞 {dados['telefone']}")
-            col1.write(f"👥 {dados['socios']}")
-
-            col2.write(f"📍 {dados['cidade']} - {dados['uf']}")
-            col2.write(f"🏭 CNAE: {dados['cnae']}")
-        else:
-            st.warning("CNPJ não localizado")
+            st.write(f"🏢 {dados['empresa']}")
+            st.write(f"📞 {dados['telefone']}")
+            st.write(f"👥 {dados['socios']}")
+            st.write(f"📍 {dados['cidade']} - {dados['uf']}")
+            st.write(f"🏭 CNAE: {dados['cnae']}")
 
     # ================================
-    # 💰 ENTRADA EM TEXTO (R$)
+    # 💰 ENTRADA
     # ================================
     st.markdown("## 💰 Dados Financeiros")
 
-    folha_input = st.text_input("Folha salarial mensal (R$)", "50000")
+    folha_input = st.text_input("Folha salarial mensal (R$)", "500000")
 
-    def parse_valor(valor):
-        valor = valor.replace("R$", "").replace(".", "").replace(",", ".").strip()
+    def parse(valor):
+        valor = valor.replace("R$", "").replace(".", "").replace(",", ".")
         try:
             return float(valor)
         except:
-            return 0.0
+            return 0
 
-    folha = parse_valor(folha_input)
+    folha = parse(folha_input)
 
-    st.write(f"💰 Interpretado: R$ {folha:,.2f}".replace(",", "X").replace(".", ",").replace("X","."))
+    st.write(f"💰 Interpretado: {br(folha)}")
 
     # ================================
     # 📊 PARÂMETROS
     # ================================
     col1, col2 = st.columns(2)
 
-    rat = col1.number_input("RAT", min_value=0.01, max_value=0.05, value=0.02)
-    fap_atual = col2.number_input("FAP atual", min_value=0.5, max_value=2.0, value=1.0)
+    rat = col1.number_input("RAT (%)", 1.0, 3.0, 2.0) / 100
+    fap_atual = col2.number_input("FAP atual", 0.5, 2.0, 1.5)
 
-    # FAP ideal automático (redução padrão)
     fap_ideal = max(fap_atual - 0.5, 0.5)
 
     st.info(f"FAP ideal estimado: {fap_ideal:.2f}")
+
+    rat_ajustado = rat * fap_atual
+
+    st.warning(f"RAT ajustado atual: {(rat_ajustado*100):.2f}%")
 
     ano_inicio = st.number_input("Ano início problema", 2000, 2035, 2023)
 
@@ -313,44 +312,40 @@ with aba2:
             total_projeto = honorarios + (mensalidade * 12)
 
             # ================================
-            # 📊 RESULTADOS
+            # 📊 RESULTADO
             # ================================
             st.markdown("## 💰 Resultado")
 
-            st.metric("Economia Mensal", f"R$ {economia:,.2f}")
-            st.metric("Recuperável Total", f"R$ {recuperavel:,.2f}")
+            st.metric("Pago Atual", br(atual))
+            st.metric("Valor Correto", br(correto))
+            st.metric("Economia Mensal", br(economia))
 
-            st.metric("Honorários (20%)", f"R$ {honorarios:,.2f}")
-            st.metric("Mensalidade", f"R$ {mensalidade:,.2f}")
-
-            st.metric("💼 Receita Projeto", f"R$ {total_projeto:,.2f}")
+            st.metric("Recuperável", br(recuperavel))
+            st.metric("Honorários", br(honorarios))
+            st.metric("Projeto Total", br(total_projeto))
 
             # ================================
-            # 📊 GRÁFICO MENSAL COMPLETO
+            # 📊 GRÁFICO CORRETO
             # ================================
             if PLOTLY_OK:
 
                 meses_lista = list(range(1,13))
 
-                atual_mensal = atual + mensalidade
-                correto_mensal = correto + mensalidade
-                economia_mensal = economia
-
                 fig = go.Figure()
 
-                fig.add_bar(x=meses_lista, y=[atual_mensal]*12, name="Atual + Serviço", marker_color="red")
-                fig.add_bar(x=meses_lista, y=[correto_mensal]*12, name="Correto + Serviço", marker_color="green")
-                fig.add_bar(x=meses_lista, y=[economia_mensal]*12, name="Economia", marker_color="blue")
+                fig.add_bar(x=meses_lista, y=[atual]*12, name="Pago Atual", marker_color="red")
+                fig.add_bar(x=meses_lista, y=[correto]*12, name="Valor Correto", marker_color="green")
+                fig.add_bar(x=meses_lista, y=[correto+mensalidade]*12, name="Correto + Serviço", marker_color="blue")
 
                 fig.update_layout(
-                    title="Comparativo Mensal Completo",
+                    title="Comparativo Mensal",
                     barmode="group"
                 )
 
                 st.plotly_chart(fig, use_container_width=True)
 
                 # ================================
-                # 📊 GRÁFICO RECUPERAÇÃO
+                # 📈 RECUPERAÇÃO
                 # ================================
                 acumulado = [economia * i for i in meses_lista]
 
@@ -374,13 +369,16 @@ with aba2:
             proposta = f"""
 Empresa: {dados.get('empresa','')}
 
-Economia mensal estimada: R$ {economia:,.2f}
-Recuperação estimada: R$ {recuperavel:,.2f}
+Valor pago atual: {br(atual)}
+Valor correto: {br(correto)}
 
-Honorários: 20% (R$ {honorarios:,.2f})
+Economia mensal: {br(economia)}
+Recuperação estimada: {br(recuperavel)}
+
+Honorários: {br(honorarios)}
 Mensalidade: R$ 5.000,00
 
-Projeto total: R$ {total_projeto:,.2f}
+Projeto total: {br(total_projeto)}
 """
 
             st.markdown("## 📄 Proposta")
@@ -396,8 +394,8 @@ Projeto total: R$ {total_projeto:,.2f}
 
                 story = [
                     Paragraph(f"Empresa: {dados.get('empresa','')}", styles["Normal"]),
-                    Paragraph(f"Recuperação: R$ {recuperavel:,.2f}", styles["Normal"]),
-                    Paragraph(f"Honorários: R$ {honorarios:,.2f}", styles["Normal"]),
+                    Paragraph(f"Recuperação: {br(recuperavel)}", styles["Normal"]),
+                    Paragraph(f"Honorários: {br(honorarios)}", styles["Normal"]),
                 ]
 
                 doc.build(story)
@@ -412,14 +410,5 @@ Projeto total: R$ {total_projeto:,.2f}
 
             st.session_state["historico"].append({
                 "empresa": dados.get("empresa",""),
-                "cnpj": cnpj,
-                "recuperavel": recuperavel
+                "valor": recuperavel
             })
-
-    # ================================
-    # 📚 HISTÓRICO
-    # ================================
-    st.markdown("## 📚 Histórico")
-
-    if "historico" in st.session_state:
-        st.dataframe(st.session_state["historico"])
