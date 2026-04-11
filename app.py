@@ -129,40 +129,160 @@ with aba1:
             pass
         return {}
 
-    if file and st.button("🚀 Processar"):
+if file and st.button("🚀 Processar"):
 
-        df = carregar_arquivo(file)
+    df = carregar_arquivo(file)
 
-        if df is None:
-            st.error("Erro ao ler arquivo")
-            st.stop()
+    if df is None:
+        st.error("Erro ao ler arquivo")
+        st.stop()
 
-        df.columns = df.columns.astype(str).str.strip()
+    df.columns = df.columns.astype(str).str.strip()
 
-        col_cnpj = detectar_cnpj(df)
+    col_cnpj = detectar_cnpj(df)
 
-        if not col_cnpj:
-            st.error("Coluna CNPJ não encontrada")
-            st.stop()
+    if not col_cnpj:
+        st.error("Coluna CNPJ não encontrada")
+        st.stop()
 
-        df[col_cnpj] = (
-            df[col_cnpj].astype(str)
-            .str.replace(r"\D","",regex=True)
-            .str.zfill(14)
-        )
+    # ================================
+    # 🧾 NORMALIZAR CNPJ
+    # ================================
+    df[col_cnpj] = (
+        df[col_cnpj].astype(str)
+        .str.replace(r"\D","",regex=True)
+        .str.zfill(14)
+    )
 
-        df = df[df[col_cnpj].duplicated(keep=False)]
+    # ================================
+    # 📍 IDENTIFICAR CIDADE (CSV)
+    # ================================
+    col_cidade = None
+    for c in df.columns:
+        if "MUNIC" in c.upper() or "CIDADE" in c.upper():
+            col_cidade = c
+            break
 
-        col_cidade = None
-        for c in df.columns:
-            if "MUNIC" in c.upper() or "CIDADE" in c.upper():
-                col_cidade = c
-                break
+    if col_cidade:
+        df["cidade"] = df[col_cidade].apply(limpar_cidade)
+    else:
+        df["cidade"] = ""
 
-        if col_cidade:
-            df["cidade"] = df[col_cidade].apply(limpar_cidade)
+    df["cidade"] = df["cidade"].astype(str).str.upper()
+
+    # ================================
+    # 📍 FILTRAR SC (ANTES DA API)
+    # ================================
+    df = df[df["cidade"].isin(CIDADES_SC)]
+
+    if df.empty:
+        st.warning("Nenhuma empresa de SC encontrada na base")
+        st.stop()
+
+    st.success(f"{len(df)} registros em SC encontrados")
+
+    # ================================
+    # 📊 AGRUPAR AFASTAMENTOS
+    # ================================
+    agrupado = df.groupby(col_cnpj).size().reset_index(name="Afastamentos")
+
+    # ================================
+    # 🔄 CONSULTA COM RETRY (3x)
+    # ================================
+    st.markdown("## 🔄 Consultando Receita...")
+
+    progress = st.progress(0)
+    status = st.empty()
+
+    dados_lista = []
+    falhas = []
+
+    cnpjs = agrupado[col_cnpj].tolist()
+    total = len(cnpjs)
+
+    def consultar_com_retry(cnpj, tentativas=3):
+        for i in range(tentativas):
+            dados = consultar_cnpj(cnpj)
+            if dados.get("empresa"):
+                return dados
+            time.sleep(1)
+        return None
+
+    # 🔎 PRIMEIRA PASSADA
+    for i, cnpj in enumerate(cnpjs):
+
+        pct = int(((i+1)/total)*100)
+        progress.progress(pct)
+        status.markdown(f"### 🔄 {pct}%")
+
+        dados = consultar_com_retry(cnpj)
+
+        if dados:
+            dados_lista.append({"CNPJ": cnpj, **dados})
         else:
-            df["cidade"] = ""
+            falhas.append(cnpj)
+
+    # 🔁 SEGUNDA PASSADA (FALHAS)
+    if falhas:
+        st.warning(f"Tentando novamente {len(falhas)} CNPJs...")
+
+        for cnpj in falhas:
+            dados = consultar_com_retry(cnpj)
+
+            if dados:
+                dados_lista.append({"CNPJ": cnpj, **dados})
+
+    df_api = pd.DataFrame(dados_lista)
+
+    if df_api.empty:
+        st.error("Nenhuma empresa validada na Receita")
+        st.stop()
+
+    # ================================
+    # 🔗 MERGE FINAL
+    # ================================
+    final = agrupado.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
+
+    # ================================
+    # 📊 RANKING FINAL
+    # ================================
+    ranking = final.sort_values("Afastamentos", ascending=False)
+
+    st.markdown("## 📊 Ranking Final")
+
+    st.dataframe(
+        ranking[[
+            col_cnpj,
+            "empresa",
+            "telefone",
+            "socios",
+            "cidade_api",
+            "Afastamentos"
+        ]],
+        use_container_width=True
+    )
+
+    # ================================
+    # 📋 LEADS
+    # ================================
+    st.markdown("## 📋 Leads Prioritários")
+
+    top = ranking.head(20)
+
+    for _, row in top.iterrows():
+
+        tel = str(row["telefone"]).replace("(","").replace(")","").replace("-","").replace(" ","")
+
+        st.write(f"🏢 {row['empresa']}")
+        st.write(f"📍 {row['cidade_api']}")
+        st.write(f"👥 {row['socios']}")
+        st.write(f"📊 Afastamentos: {row['Afastamentos']}")
+
+        if tel and tel != "nan":
+            link = f"https://wa.me/55{tel}?text=Olá, identificamos oportunidades de redução no FAP da sua empresa."
+            st.markdown(f"[📲 WhatsApp]({link})")
+
+        st.divider()
 
         st.markdown("## 🔄 Processando...")
 
