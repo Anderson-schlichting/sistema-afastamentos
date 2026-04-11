@@ -251,7 +251,13 @@ with aba2:
     # ================================
     st.markdown("## 📊 Dados Financeiros")
 
-    folha = st.number_input("Folha salarial mensal (R$)", 0.0)
+    import locale
+locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+
+folha = st.number_input("Folha salarial mensal (R$)", 0.0)
+
+if folha > 0:
+    st.write(f"💰 Valor informado: R$ {folha:,.2f}".replace(",", "X").replace(".", ",").replace("X","."))
     rat = st.number_input("RAT (ex: 0.02)", 0.0)
     fap_atual = st.number_input("FAP atual", 0.5, 2.0)
     fap_ideal = st.slider("FAP ideal", 0.5, 2.0, 1.0)
@@ -278,6 +284,20 @@ with aba2:
 
             st.metric("📊 Economia Anual", f"R$ {anual:,.2f}")
             st.metric("🏦 Recuperável", f"R$ {recuperavel:,.2f}")
+
+            import pandas as pd
+
+# ================================
+# 📊 GRÁFICO COMPARATIVO
+# ================================
+grafico_df = pd.DataFrame({
+    "Tipo": ["Atual", "Correto", "Economia"],
+    "Valor": [atual, correto, economia]
+})
+
+st.markdown("## 📊 Comparativo Financeiro")
+
+st.bar_chart(grafico_df.set_index("Tipo"))
 
             # ================================
             # 🧠 PROPOSTA AUTOMÁTICA
