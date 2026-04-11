@@ -85,15 +85,18 @@ def calcular_fap(folha, rat, fap_atual, fap_ideal):
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 
 # ================================
-# 📊 ABA 1 - PROSPECÇÃO COMPLETA
+# 📊 ABA 1 - PROSPECÇÃO COMPLETA SC
 # ================================
 with aba1:
 
     import pandas as pd
     import streamlit as st
     import time
+    import requests
 
-    CIDADES_SC = [
+    st.subheader("📊 Prospecção Inteligente - Santa Catarina")
+
+CIDADES_SC = [
 "ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA DOCE","ÁGUAS DE CHAPECÓ",
 "ÁGUAS FRIAS","ÁGUAS MORNAS","ALFREDO WAGNER","ALTO BELA VISTA",
 "ANCHIETA","ANGELINA","ANITA GARIBALDI","ANITÁPOLIS","ANTÔNIO CARLOS",
@@ -162,8 +165,6 @@ with aba1:
 "XAVANTINA","XAXIM","ZORTÉA"
 ]
 
-    st.subheader("📊 Prospecção Inteligente - SC")
-
     file = st.file_uploader("Envie CSV ou Excel")
 
     # ================================
@@ -203,7 +204,6 @@ with aba1:
     @st.cache_data(ttl=86400)
     def consultar_cnpj(cnpj):
         try:
-            import requests
             r = requests.get(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}", timeout=3)
             if r.status_code == 200:
                 data = r.json()
@@ -258,6 +258,8 @@ with aba1:
 
         if col_cidade:
             df["cidade"] = df[col_cidade].apply(limpar_cidade)
+        else:
+            df["cidade"] = ""
 
         # ================================
         # 🔄 CONSULTA COM %
@@ -285,74 +287,34 @@ with aba1:
                 if dados.get("empresa"):
                     dados_lista.append({"CNPJ": cnpj, **dados})
 
-                time.sleep(0.03)  # suaviza animação
+                time.sleep(0.02)
 
         df_api = pd.DataFrame(dados_lista)
 
+        if df_api.empty:
+            st.error("Nenhuma empresa encontrada na Receita")
+            st.stop()
+
         # ================================
-# 🔗 JUNTAR DADOS DA API
-# ================================
-df = df.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
+        # 🔗 MERGE
+        # ================================
+        df = df.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
 
-# ================================
-# 🧪 DEBUG (PODE REMOVER DEPOIS)
-# ================================
-st.write("UF únicos:", df["uf"].unique())
-st.write("Cidade API exemplo:", df["cidade_api"].head())
+        # ================================
+        # 📍 FILTRO SC ROBUSTO
+        # ================================
+        df["cidade_api"] = df["cidade_api"].astype(str).str.upper()
+        df["cidade"] = df["cidade"].astype(str).str.upper()
 
-# ================================
-# 📍 FILTRO SC ROBUSTO
-# ================================
-if "cidade_api" not in df.columns:
-    df["cidade_api"] = ""
+        df = df[
+            (df["uf"] == "SC") |
+            (df["cidade_api"].isin(CIDADES_SC)) |
+            (df["cidade"].isin(CIDADES_SC))
+        ]
 
-if "cidade" not in df.columns:
-    df["cidade"] = ""
-
-df["cidade_api"] = df["cidade_api"].astype(str).str.upper()
-df["cidade"] = df["cidade"].astype(str).str.upper()
-
-df = df[
-    (df["uf"] == "SC") |
-    (df["cidade_api"].isin(CIDADES_SC)) |
-    (df["cidade"].isin(CIDADES_SC))
-]
-
-if df.empty:
-    st.warning("Nenhuma empresa de SC encontrada")
-    st.stop()
-
-df_api = pd.DataFrame(dados_lista)
-
-if df_api.empty:
-    st.error("Nenhuma empresa encontrada na Receita")
-    st.stop()
-
- df = df.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
-
-# ================================
-# 📍 FILTRO SC
-# ================================
-# garantir colunas seguras
-if "cidade_api" not in df.columns:
-    df["cidade_api"] = ""
-
-if "cidade" not in df.columns:
-    df["cidade"] = ""
-
-df["cidade_api"] = df["cidade_api"].astype(str).str.upper()
-df["cidade"] = df["cidade"].astype(str).str.upper()
-
-# filtro SC robusto
-df = df[
-    (df["uf"] == "SC") |
-    (df["cidade_api"].isin(CIDADES_SC)) |
-    (df["cidade"].isin(CIDADES_SC))
-]
-
-if df.empty:
-    st.warning("Nenhuma empresa de SC encontrada")
-    st.stop()
+        if df.empty:
+            st.warning("Nenhuma empresa de SC encontrada")
+            st.stop()
 
         # ================================
         # 📊 RANKING POR CIDADE
@@ -395,7 +357,7 @@ if df.empty:
             telefone = str(row["telefone"]).replace("(","").replace(")","").replace("-","").replace(" ","")
 
             if telefone:
-                link = f"https://wa.me/55{telefone}?text=Olá, analisamos sua empresa e identificamos oportunidades de redução de custos tributários."
+                link = f"https://wa.me/55{telefone}?text=Olá, analisamos sua empresa e identificamos oportunidades de redução no FAP."
 
                 st.markdown(f"👉 {row['empresa']} - [Chamar no WhatsApp]({link})")
 # ================================
