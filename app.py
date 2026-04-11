@@ -87,7 +87,143 @@ aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
 # 📊 ABA 1 - PROSPECÇÃO COMPLETA SC
 # ================================
-with aba1:
+import pandas as pd
+import time
+import requests
+
+st.subheader("📊 Prospecção Inteligente - Santa Catarina")
+
+CIDADES_SC = [
+    "BLUMENAU","JOINVILLE","FLORIANÓPOLIS","CHAPECÓ","ITAJAÍ","LAGES",
+    "CRICIÚMA","RIO DO SUL","JARAGUÁ DO SUL","PALHOÇA"
+]
+
+file = st.file_uploader("Envie CSV ou Excel")
+
+def carregar_arquivo(file):
+    try:
+        if file.name.endswith(".csv"):
+            return pd.read_csv(file, sep=';', encoding='latin1')
+        return pd.read_excel(file)
+    except:
+        return None
+
+def detectar_cnpj(df):
+    for c in df.columns:
+        if "CNPJ" in c.upper():
+            return c
+    return None
+
+def limpar_cidade(valor):
+    if pd.isna(valor):
+        return ""
+    valor = str(valor)
+    if "-" in valor:
+        valor = valor.split("-", 1)[1]
+    return valor.strip().upper()
+
+@st.cache_data(ttl=86400)
+def consultar_cnpj(cnpj):
+    try:
+        r = requests.get(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}", timeout=3)
+        if r.status_code == 200:
+            data = r.json()
+            return {
+                "empresa": data.get("razao_social",""),
+                "telefone": data.get("ddd_telefone_1",""),
+                "cidade_api": data.get("municipio",""),
+                "uf": data.get("uf",""),
+                "socios": ", ".join([q.get("nome_socio","") for q in data.get("qsa",[])])
+            }
+    except:
+        pass
+    return {}
+
+if file is not None and st.button("🚀 Processar"):
+
+    df = carregar_arquivo(file)
+
+    if df is None:
+        st.error("Erro ao ler arquivo")
+        st.stop()
+
+    df.columns = df.columns.astype(str).str.strip()
+
+    col_cnpj = detectar_cnpj(df)
+
+    if col_cnpj is None:
+        st.error("Coluna CNPJ não encontrada")
+        st.stop()
+
+    df[col_cnpj] = (
+        df[col_cnpj].astype(str)
+        .str.replace(r"\D","",regex=True)
+        .str.zfill(14)
+    )
+
+    df = df[df[col_cnpj].duplicated(keep=False)]
+
+    col_cidade = None
+    for c in df.columns:
+        if "MUNIC" in c.upper() or "CIDADE" in c.upper():
+            col_cidade = c
+            break
+
+    if col_cidade:
+        df["cidade"] = df[col_cidade].apply(limpar_cidade)
+    else:
+        df["cidade"] = ""
+
+    st.markdown("## 🔄 Processando...")
+
+    progress_bar = st.progress(0)
+    status = st.empty()
+
+    dados_lista = []
+    cnpjs = df[col_cnpj].unique()
+    total = len(cnpjs)
+
+    with st.spinner("Consultando Receita..."):
+
+        for i, cnpj in enumerate(cnpjs):
+
+            pct = int(((i + 1) / total) * 100)
+
+            status.markdown(f"### 🔄 {pct}% concluído")
+            progress_bar.progress(pct)
+
+            dados = consultar_cnpj(cnpj)
+
+            if dados.get("empresa"):
+                dados_lista.append({"CNPJ": cnpj, **dados})
+
+            time.sleep(0.02)
+
+    df_api = pd.DataFrame(dados_lista)
+
+    if df_api.empty:
+        st.error("Nenhuma empresa encontrada na Receita")
+        st.stop()
+
+    df = df.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
+
+    df["cidade_api"] = df["cidade_api"].astype(str).str.upper()
+    df["cidade"] = df["cidade"].astype(str).str.upper()
+
+    df = df[
+        (df["uf"] == "SC") |
+        (df["cidade_api"].isin(CIDADES_SC)) |
+        (df["cidade"].isin(CIDADES_SC))
+    ]
+
+    if df.empty:
+        st.warning("Nenhuma empresa de SC encontrada")
+        st.stop()
+
+    ranking = df["cidade_api"].value_counts().reset_index()
+    ranking.columns = ["Cidade", "Empresas"]
+
+    st.dataframe(ranking)
 
     import pandas as pd
     import streamlit as st
