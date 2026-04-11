@@ -322,16 +322,18 @@ if df.empty:
     st.warning("Nenhuma empresa de SC encontrada")
     st.stop()
 
-        if df_api.empty:
-            st.error("Nenhuma empresa encontrada na Receita")
-            st.stop()
+df_api = pd.DataFrame(dados_lista)
 
-        df = df.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
+if df_api.empty:
+    st.error("Nenhuma empresa encontrada na Receita")
+    st.stop()
 
-        # ================================
-        # 📍 FILTRO SC
-        # ================================
-       # garantir colunas seguras
+ df = df.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
+
+# ================================
+# 📍 FILTRO SC
+# ================================
+# garantir colunas seguras
 if "cidade_api" not in df.columns:
     df["cidade_api"] = ""
 
