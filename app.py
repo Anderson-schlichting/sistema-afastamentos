@@ -303,10 +303,11 @@ grafico_df = pd.DataFrame({
 }, index=["Atual", "Correto", "Economia"])
 
 st.bar_chart(grafico_df)
-            # ================================
-            # 📄 PROPOSTA
-            # ================================
-            proposta = f"""
+            
+# ================================
+# 📄 PROPOSTA (CORRIGIDA)
+# ================================
+proposta = f"""
 Empresa: {dados.get('empresa','')}
 
 Identificamos pagamento indevido relacionado ao FAP.
@@ -318,8 +319,8 @@ Recuperável (5 anos): R$ {recuperavel:,.2f}
 Podemos atuar na recuperação desses valores.
 """
 
-            st.markdown("## 📄 Proposta")
-            st.text_area("Copiar proposta", proposta, height=200)
+st.markdown("## 📄 Proposta")
+st.text_area("Copiar proposta", proposta, height=200)
 
             # ================================
             # 📄 PDF
