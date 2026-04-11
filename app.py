@@ -183,7 +183,7 @@ with aba1:
         st.dataframe(df, use_container_width=True)
 
 # ================================
-# 🔎 ABA 2 FINAL DEFINITIVA
+# 🔎 ABA 2 FINAL COMPLETA (PRO)
 # ================================
 with aba2:
 
@@ -198,14 +198,15 @@ with aba2:
         PLOTLY_OK = False
 
     try:
-        from reportlab.platypus import SimpleDocTemplate, Paragraph
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Image
         from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import inch
         PDF_OK = True
     except:
         PDF_OK = False
 
-    def br(valor):
-        return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X",".")
+    def br(v):
+        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X",".")
 
     st.subheader("🔎 Diagnóstico Comercial FAP")
 
@@ -217,10 +218,8 @@ with aba2:
         try:
             url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
             r = requests.get(url, timeout=5)
-
             if r.status_code == 200:
                 data = r.json()
-
                 return {
                     "empresa": data.get("razao_social",""),
                     "telefone": data.get("ddd_telefone_1",""),
@@ -231,14 +230,12 @@ with aba2:
                 }
         except:
             pass
-
         return {}
 
     # ================================
     # 🧠 CNPJ
     # ================================
     cnpj_input = st.text_input("Digite o CNPJ")
-
     dados = {}
     cnpj = ""
 
@@ -269,146 +266,110 @@ with aba2:
             return 0
 
     folha = parse(folha_input)
-
     st.write(f"💰 Interpretado: {br(folha)}")
 
-    # ================================
-    # 📊 PARÂMETROS
-    # ================================
     col1, col2 = st.columns(2)
-
     rat = col1.number_input("RAT (%)", 1.0, 3.0, 2.0) / 100
     fap_atual = col2.number_input("FAP atual", 0.5, 2.0, 1.5)
 
     fap_ideal = max(fap_atual - 0.5, 0.5)
-
     st.info(f"FAP ideal estimado: {fap_ideal:.2f}")
 
-    rat_ajustado = rat * fap_atual
-
-    st.warning(f"RAT ajustado atual: {(rat_ajustado*100):.2f}%")
-
     ano_inicio = st.number_input("Ano início problema", 2000, 2035, 2023)
+
+    # ================================
+    # 📝 ANOTAÇÕES
+    # ================================
+    obs = st.text_area("📝 Anotações sobre o cliente")
 
     # ================================
     # 🚀 CÁLCULO
     # ================================
     if st.button("🚀 Gerar Diagnóstico"):
 
-        if folha > 0:
+        hoje = datetime.datetime.now()
+        meses = (hoje.year - ano_inicio) * 12 + hoje.month
 
-            hoje = datetime.datetime.now()
-            meses = (hoje.year - ano_inicio) * 12 + hoje.month
+        atual = folha * rat * fap_atual
+        correto = folha * rat * fap_ideal
+        economia = max(atual - correto, 0)
 
-            atual = folha * rat * fap_atual
-            correto = folha * rat * fap_ideal
-            economia = max(atual - correto, 0)
+        recuperavel = economia * meses
+        honorarios = recuperavel * 0.20
+        mensalidade = 5000
+        total = honorarios + (mensalidade * 12)
 
-            recuperavel = economia * meses
+        st.markdown("## 💰 Resultado")
 
-            honorarios = recuperavel * 0.20
-            mensalidade = 5000
+        st.metric("Pago Atual", br(atual))
+        st.metric("Valor Correto", br(correto))
+        st.metric("Economia Mensal", br(economia))
 
-            total_projeto = honorarios + (mensalidade * 12)
+        st.metric("Recuperável", br(recuperavel))
+        st.metric("Honorários", br(honorarios))
+        st.metric("Projeto Total", br(total))
 
-            # ================================
-            # 📊 RESULTADO
-            # ================================
-            st.markdown("## 💰 Resultado")
+        # ================================
+        # 📊 GRÁFICOS
+        # ================================
+        if PLOTLY_OK:
 
-            st.metric("Pago Atual", br(atual))
-            st.metric("Valor Correto", br(correto))
-            st.metric("Economia Mensal", br(economia))
+            meses_lista = list(range(1,13))
 
-            st.metric("Recuperável", br(recuperavel))
-            st.metric("Honorários", br(honorarios))
-            st.metric("Projeto Total", br(total_projeto))
+            fig = go.Figure()
+            fig.add_bar(x=meses_lista, y=[atual]*12, name="Atual", marker_color="red")
+            fig.add_bar(x=meses_lista, y=[correto]*12, name="Correto", marker_color="green")
+            fig.add_bar(x=meses_lista, y=[correto+mensalidade]*12, name="Correto + Serviço", marker_color="blue")
 
-            # ================================
-            # 📊 GRÁFICO CORRETO
-            # ================================
-            if PLOTLY_OK:
+            st.plotly_chart(fig)
 
-                meses_lista = list(range(1,13))
+            # gráfico recuperação
+            acumulado = [economia * i for i in meses_lista]
+            fig2 = go.Figure()
+            fig2.add_scatter(x=meses_lista, y=acumulado, mode="lines+markers")
 
-                fig = go.Figure()
+            st.plotly_chart(fig2)
 
-                fig.add_bar(x=meses_lista, y=[atual]*12, name="Pago Atual", marker_color="red")
-                fig.add_bar(x=meses_lista, y=[correto]*12, name="Valor Correto", marker_color="green")
-                fig.add_bar(x=meses_lista, y=[correto+mensalidade]*12, name="Correto + Serviço", marker_color="blue")
+        # ================================
+        # 📄 PDF COM GRÁFICO
+        # ================================
+        if PDF_OK and PLOTLY_OK:
 
-                fig.update_layout(
-                    title="Comparativo Mensal",
-                    barmode="group"
-                )
+            img_bytes = fig.to_image(format="png")
 
-                st.plotly_chart(fig, use_container_width=True)
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer)
+            styles = getSampleStyleSheet()
 
-                # ================================
-                # 📈 RECUPERAÇÃO
-                # ================================
-                acumulado = [economia * i for i in meses_lista]
+            story = [
+                Paragraph(f"Empresa: {dados.get('empresa','')}", styles["Normal"]),
+                Paragraph(f"Recuperável: {br(recuperavel)}", styles["Normal"]),
+                Paragraph(f"Honorários: {br(honorarios)}", styles["Normal"]),
+                Paragraph(f"Observações: {obs}", styles["Normal"]),
+                Image(BytesIO(img_bytes), width=400, height=200)
+            ]
 
-                fig2 = go.Figure()
+            doc.build(story)
 
-                fig2.add_trace(go.Scatter(
-                    x=meses_lista,
-                    y=acumulado,
-                    mode='lines+markers',
-                    name="Recuperação",
-                    line=dict(color="green")
-                ))
+            st.download_button("📄 Baixar PDF", buffer.getvalue(), "proposta.pdf")
 
-                fig2.update_layout(title="Evolução da Recuperação")
+        # ================================
+        # 📚 HISTÓRICO
+        # ================================
+        if "historico" not in st.session_state:
+            st.session_state["historico"] = []
 
-                st.plotly_chart(fig2, use_container_width=True)
+        st.session_state["historico"].append({
+            "data": str(datetime.datetime.now()),
+            "empresa": dados.get("empresa",""),
+            "cnpj": cnpj,
+            "recuperavel": br(recuperavel)
+        })
 
-            # ================================
-            # 📄 PROPOSTA
-            # ================================
-            proposta = f"""
-Empresa: {dados.get('empresa','')}
+    # ================================
+    # 📚 VISUAL HISTÓRICO
+    # ================================
+    st.markdown("## 📚 Histórico")
 
-Valor pago atual: {br(atual)}
-Valor correto: {br(correto)}
-
-Economia mensal: {br(economia)}
-Recuperação estimada: {br(recuperavel)}
-
-Honorários: {br(honorarios)}
-Mensalidade: R$ 5.000,00
-
-Projeto total: {br(total_projeto)}
-"""
-
-            st.markdown("## 📄 Proposta")
-            st.text_area("Copiar proposta", proposta, height=200)
-
-            # ================================
-            # 📄 PDF
-            # ================================
-            if PDF_OK:
-                buffer = BytesIO()
-                doc = SimpleDocTemplate(buffer)
-                styles = getSampleStyleSheet()
-
-                story = [
-                    Paragraph(f"Empresa: {dados.get('empresa','')}", styles["Normal"]),
-                    Paragraph(f"Recuperação: {br(recuperavel)}", styles["Normal"]),
-                    Paragraph(f"Honorários: {br(honorarios)}", styles["Normal"]),
-                ]
-
-                doc.build(story)
-
-                st.download_button("📄 Baixar PDF", buffer.getvalue(), "proposta.pdf")
-
-            # ================================
-            # 📚 HISTÓRICO
-            # ================================
-            if "historico" not in st.session_state:
-                st.session_state["historico"] = []
-
-            st.session_state["historico"].append({
-                "empresa": dados.get("empresa",""),
-                "valor": recuperavel
-            })
+    if "historico" in st.session_state:
+        st.dataframe(st.session_state["historico"])
