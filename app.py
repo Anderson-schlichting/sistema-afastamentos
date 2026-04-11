@@ -85,17 +85,21 @@ def calcular_fap(folha, rat, fap_atual, fap_ideal):
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 
 # ================================
-# 📊 ABA 1 - PROSPECÇÃO AVANÇADA
+# 📊 ABA 1 - PROSPECÇÃO COMPLETA
 # ================================
 with aba1:
 
     import pandas as pd
     import streamlit as st
+    import time
 
     st.subheader("📊 Prospecção Inteligente - SC")
 
     file = st.file_uploader("Envie CSV ou Excel")
 
+    # ================================
+    # 📂 LEITURA
+    # ================================
     def carregar_arquivo(file):
         try:
             if file.name.endswith(".csv"):
@@ -104,12 +108,18 @@ with aba1:
         except:
             return None
 
+    # ================================
+    # 🔎 DETECTAR CNPJ
+    # ================================
     def detectar_cnpj(df):
         for c in df.columns:
             if "CNPJ" in c.upper():
                 return c
         return None
 
+    # ================================
+    # 🧠 LIMPAR CIDADE
+    # ================================
     def limpar_cidade(valor):
         if pd.isna(valor):
             return ""
@@ -118,6 +128,9 @@ with aba1:
             valor = valor.split("-", 1)[1]
         return valor.strip().upper()
 
+    # ================================
+    # 📡 API
+    # ================================
     @st.cache_data(ttl=86400)
     def consultar_cnpj(cnpj):
         try:
@@ -136,6 +149,9 @@ with aba1:
             pass
         return {}
 
+    # ================================
+    # 🚀 PROCESSAMENTO
+    # ================================
     if file and st.button("🚀 Processar"):
 
         df = carregar_arquivo(file)
@@ -148,15 +164,23 @@ with aba1:
 
         col_cnpj = detectar_cnpj(df)
 
+        if not col_cnpj:
+            st.error("Coluna CNPJ não encontrada")
+            st.stop()
+
+        # normalizar CNPJ
         df[col_cnpj] = (
             df[col_cnpj].astype(str)
             .str.replace(r"\D","",regex=True)
             .str.zfill(14)
         )
 
+        # duplicados
         df = df[df[col_cnpj].duplicated(keep=False)]
 
-        # cidade planilha
+        # ================================
+        # 📍 CIDADE PLANILHA
+        # ================================
         col_cidade = None
         for c in df.columns:
             if "MUNIC" in c.upper() or "CIDADE" in c.upper():
@@ -166,19 +190,50 @@ with aba1:
         if col_cidade:
             df["cidade"] = df[col_cidade].apply(limpar_cidade)
 
-        # consulta API
+        # ================================
+        # 🔄 CONSULTA COM %
+        # ================================
+        st.markdown("## 🔄 Processando dados...")
+
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
         dados_lista = []
-        for cnpj in df[col_cnpj].unique():
-            d = consultar_cnpj(cnpj)
-            if d.get("empresa"):
-                dados_lista.append({"CNPJ": cnpj, **d})
+        cnpjs = df[col_cnpj].unique()
+        total = len(cnpjs)
+
+        with st.spinner("Consultando Receita..."):
+
+            for i, cnpj in enumerate(cnpjs):
+
+                progresso = int(((i+1)/total)*100)
+
+                status_text.markdown(f"### 🔄 Processando: {progresso}%")
+                progress_bar.progress(progresso)
+
+                dados = consultar_cnpj(cnpj)
+
+                if dados.get("empresa"):
+                    dados_lista.append({"CNPJ": cnpj, **dados})
+
+                time.sleep(0.03)  # suaviza animação
 
         df_api = pd.DataFrame(dados_lista)
 
+        if df_api.empty:
+            st.error("Nenhuma empresa encontrada na Receita")
+            st.stop()
+
         df = df.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
 
-        # FILTRO SC
+        # ================================
+        # 📍 FILTRO SC
+        # ================================
         df = df[df["uf"] == "SC"]
+
+        if df.empty:
+            st.warning("Nenhuma empresa de SC encontrada")
+            st.stop()
 
         # ================================
         # 📊 RANKING POR CIDADE
@@ -187,12 +242,12 @@ with aba1:
         ranking_cidade.columns = ["Cidade", "Empresas"]
 
         st.markdown("## 📊 Ranking por Cidade")
-        st.dataframe(ranking_cidade)
+        st.dataframe(ranking_cidade, use_container_width=True)
 
         st.bar_chart(ranking_cidade.set_index("Cidade"))
 
         # ================================
-        # 🗺️ MAPA SC (SIMULADO)
+        # 🗺️ MAPA
         # ================================
         st.markdown("## 🗺️ Distribuição")
 
@@ -209,7 +264,7 @@ with aba1:
 
         leads = df[["empresa","telefone","socios","cidade_api"]]
 
-        st.dataframe(leads)
+        st.dataframe(leads, use_container_width=True)
 
         # ================================
         # 📲 WHATSAPP
@@ -221,10 +276,9 @@ with aba1:
             telefone = str(row["telefone"]).replace("(","").replace(")","").replace("-","").replace(" ","")
 
             if telefone:
-                link = f"https://wa.me/55{telefone}?text=Olá, analisamos sua empresa e identificamos oportunidade de redução no FAP."
+                link = f"https://wa.me/55{telefone}?text=Olá, analisamos sua empresa e identificamos oportunidades de redução de custos tributários."
 
                 st.markdown(f"👉 {row['empresa']} - [Chamar no WhatsApp]({link})")
-
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
