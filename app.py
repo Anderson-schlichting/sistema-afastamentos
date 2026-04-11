@@ -219,22 +219,69 @@ if file and st.button("🚀 Processar"):
             time.sleep(0.5)
         return None
 
-    for i in range(0, total, BLOCO):
+# containers dinâmicos
+tabela_container = st.empty()
+leads_container = st.empty()
 
-        bloco = cnpjs[i:i+BLOCO]
-        status.markdown(f"### 🔄 Lote {int(i/BLOCO)+1}")
+for i in range(0, total, BLOCO):
 
-        for cnpj in bloco:
+    bloco = cnpjs[i:i+BLOCO]
+    status.markdown(f"### 🔄 Lote {int(i/BLOCO)+1}")
 
-            dados = consultar_com_retry(cnpj)
+    for cnpj in bloco:
 
-            if dados:
-                dados_lista.append({"CNPJ": cnpj, **dados})
-            else:
-                falhas.append(cnpj)
+        dados = consultar_com_retry(cnpj)
 
-        progresso = int((min(i+BLOCO, total) / total) * 100)
-        progress.progress(progresso)
+        if dados:
+            dados_lista.append({"CNPJ": cnpj, **dados})
+        else:
+            falhas.append(cnpj)
+
+    progresso = int((min(i+BLOCO, total) / total) * 100)
+    progress.progress(progresso)
+
+    # ================================
+    # 📊 ATUALIZA RESULTADO PARCIAL
+    # ================================
+    df_api_parcial = pd.DataFrame(dados_lista)
+
+    if not df_api_parcial.empty:
+
+        parcial = agrupado.merge(
+            df_api_parcial,
+            left_on=col_cnpj,
+            right_on="CNPJ",
+            how="inner"
+        )
+
+        ranking_parcial = parcial.sort_values("Afastamentos", ascending=False)
+
+        with tabela_container:
+            st.markdown("## 📊 Ranking (em andamento)")
+            st.dataframe(
+                ranking_parcial[[
+                    col_cnpj,
+                    "empresa",
+                    "cidade_api",
+                    "Afastamentos"
+                ]],
+                use_container_width=True
+            )
+
+        with leads_container:
+            st.markdown("## 📋 Leads (parcial)")
+
+            for _, row in ranking_parcial.head(10).iterrows():
+
+                tel = str(row["telefone"]).replace("(","").replace(")","").replace("-","").replace(" ","")
+
+                st.write(f"🏢 {row['empresa']} | 📊 {row['Afastamentos']}")
+
+                if tel and tel != "nan":
+                    link = f"https://wa.me/55{tel}?text=Olá, identificamos oportunidades de redução no FAP da sua empresa."
+                    st.markdown(f"[📲 WhatsApp]({link})")
+
+                st.divider()
 
     # retry falhas
     if falhas:
