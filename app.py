@@ -93,6 +93,75 @@ with aba1:
     import streamlit as st
     import time
 
+    CIDADES_SC = [
+"ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA DOCE","ÁGUAS DE CHAPECÓ",
+"ÁGUAS FRIAS","ÁGUAS MORNAS","ALFREDO WAGNER","ALTO BELA VISTA",
+"ANCHIETA","ANGELINA","ANITA GARIBALDI","ANITÁPOLIS","ANTÔNIO CARLOS",
+"APIÚNA","ARABUTÃ","ARAQUARI","ARARANGUÁ","ARMAZÉM","ARROIO TRINTA",
+"ARVOREDO","ASCURRA","ATALANTA","AURORA","BALNEÁRIO ARROIO DO SILVA",
+"BALNEÁRIO CAMBORIÚ","BALNEÁRIO BARRA DO SUL","BALNEÁRIO GAIVOTA",
+"BARRA BONITA","BARRA VELHA","BELMONTE","BENEDITO NOVO","BIGUAÇU",
+"BLUMENAU","BOCAINA DO SUL","BOMBINHAS","BOM JARDIM DA SERRA",
+"BOM JESUS","BOM JESUS DO OESTE","BOM RETIRO","BOTUVERÁ","BRAÇO DO NORTE",
+"BRAÇO DO TROMBUDO","BRUNÓPOLIS","BRUSQUE","CAÇADOR","CAIBI","CALMON",
+"CAMBORIÚ","CAMPO ALEGRE","CAMPO BELO DO SUL","CAMPO ERÊ",
+"CAMPOS NOVOS","CANELINHA","CANOINHAS","CAPÃO ALTO","CAPINZAL",
+"CAPIVARI DE BAIXO","CATANDUVAS","CAXAMBU DO SUL","CELSO RAMOS",
+"CHAPADÃO DO LAGEADO","CHAPECÓ","COCAL DO SUL","CONCÓRDIA",
+"CORDILHEIRA ALTA","CORONEL FREITAS","CORONEL MARTINS","CORUPÁ",
+"CRICIÚMA","CUNHA PORÃ","CUNHATAÍ","CURITIBANOS","DESCANSO",
+"DIONÍSIO CERQUEIRA","DONA EMMA","DOUTOR PEDRINHO","ENTRE RIOS",
+"ERMO","ERVAL VELHO","FAXINAL DOS GUEDES","FLOR DO SERTÃO",
+"FLORIANÓPOLIS","FORMOSA DO SUL","FORQUILHINHA","FRAIBURGO",
+"FREI ROGÉRIO","GALVÃO","GAROPABA","GARUVA","GASPAR",
+"GOIO-EN","GOVERNADOR CELSO RAMOS","GRÃO-PARÁ","GRAVATAL",
+"GUABIRUBA","GUARACIABA","GUARAMIRIM","GUARUJÁ DO SUL",
+"GUATAMBÚ","HERVAL D’OESTE","IBIAM","IBICARÉ","IBIRAMA",
+"IÇARA","ILHOTA","IMARUÍ","IMBITUBA","IMBUIA","INDAIAL",
+"IOMERÊ","IPIRA","IPORÃ DO OESTE","IPUAÇU","IPUMIRIM",
+"IRACEMINHA","IRANI","IRATI","IRINEÓPOLIS","ITÁ","ITAÍÓPOLIS",
+"ITAJÁ","ITAPEMA","ITAPIRANGA","ITAPOÁ","ITUPORANGA",
+"JABORÁ","JACINTO MACHADO","JAGUARUNA","JARAGUÁ DO SUL",
+"JARDINÓPOLIS","JOAÇABA","JOINVILLE","JOSÉ BOITEUX",
+"JUPIÁ","LACERDÓPOLIS","LAGES","LAGUNA","LAJEADO GRANDE",
+"LAURENTINO","LAURO MÜLLER","LEBON RÉGIS","LEOBERTO LEAL",
+"LINDÓIA DO SUL","LONTRAS","LUIZ ALVES","LUZERNA","MACIEIRA",
+"MAFRA","MAJOR GERCINO","MAJOR VIEIRA","MARACAJÁ","MARAVILHA",
+"MAREMA","MASSARANDUBA","MATOS COSTA","MELEIRO","MIRIM DOCE",
+"MODELO","MONDAÍ","MONTE CARLO","MONTE CASTELO","MORRO DA FUMAÇA",
+"MORRO GRANDE","NAVEGANTES","NOVA ERECHIM","NOVA ITABERABA",
+"NOVA TRENTO","NOVA VENEZA","NOVO HORIZONTE","ORLEANS","OTACÍLIO COSTA",
+"OURO","OURO VERDE","PAIAL","PAINEL","PALHOÇA","PALMA SOLA",
+"PALMEIRA","PALMITOS","PAPANDUVA","PARAÍSO","PASSO DE TORRES",
+"PASSOS MAIA","PAULO LOPES","PEDRAS GRANDES","PENHA","PERITIBA",
+"PESCARIA BRAVA","PETROLÂNDIA","PIÇARRAS","PINHALZINHO","PINHEIRO PRETO",
+"PIRATUBA","PLANALTO ALEGRE","POMERODE","PONTE ALTA",
+"PONTE ALTA DO NORTE","PONTE SERRADA","PORTO BELO","PORTO UNIÃO",
+"POUSO REDONDO","PRAIA GRANDE","PRESIDENTE CASTELLO BRANCO",
+"PRESIDENTE GETÚLIO","PRESIDENTE NEREU","PRINCESA","QUILOMBO",
+"RANCHO QUEIMADO","RIO DAS ANTAS","RIO DO CAMPO","RIO DO OESTE",
+"RIO DOS CEDROS","RIO DO SUL","RIO FORTUNA","RIO NEGRINHO",
+"RIO RUFINO","RIQUEZA","RODEIO","ROMELÂNDIA","SALETE",
+"SALTINHO","SALTO VELOSO","SANGÃO","SANTA CECÍLIA",
+"SANTA HELENA","SANTA ROSA DE LIMA","SANTA ROSA DO SUL",
+"SANTA TEREZINHA","SANTA TEREZINHA DO PROGRESSO",
+"SANTIAGO DO SUL","SANTO AMARO DA IMPERATRIZ","SÃO BENTO DO SUL",
+"SÃO BERNARDINO","SÃO BONIFÁCIO","SÃO CARLOS","SÃO CRISTÓVÃO DO SUL",
+"SÃO DOMINGOS","SÃO FRANCISCO DO SUL","SÃO JOÃO BATISTA",
+"SÃO JOÃO DO ITAPERIÚ","SÃO JOÃO DO OESTE","SÃO JOÃO DO SUL",
+"SÃO JOAQUIM","SÃO JOSÉ","SÃO JOSÉ DO CEDRO","SÃO JOSÉ DO CERRITO",
+"SÃO LOURENÇO DO OESTE","SÃO LUDGERO","SÃO MARTINHO",
+"SÃO MIGUEL DA BOA VISTA","SÃO MIGUEL DO OESTE","SÃO PEDRO DE ALCÂNTARA",
+"SAUDADES","SCHROEDER","SEARA","SERRA ALTA","SIDERÓPOLIS",
+"SOMBRIO","SUL BRASIL","TAIÓ","TANGARÁ","TIGRINHOS","TIJUCAS",
+"TIMBÉ DO SUL","TIMBÓ","TIMBÓ GRANDE","TRÊS BARRAS","TREVISO",
+"TREZE DE MAIO","TREZE TÍLIAS","TROMBUDO CENTRAL","TUBARÃO",
+"TUNÁPOLIS","TURVO","UNIÃO DO OESTE","URUBICI","URUPEMA",
+"URUPEMA","URUSSANGA","VARGEÃO","VARGEM","VARGEM BONITA",
+"VIDAL RAMOS","VIDEIRA","VITOR MEIRELES","WITMARSUM","XANXERÊ",
+"XAVANTINA","XAXIM","ZORTÉA"
+]
+
     st.subheader("📊 Prospecção Inteligente - SC")
 
     file = st.file_uploader("Envie CSV ou Excel")
@@ -220,6 +289,39 @@ with aba1:
 
         df_api = pd.DataFrame(dados_lista)
 
+        # ================================
+# 🔗 JUNTAR DADOS DA API
+# ================================
+df = df.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
+
+# ================================
+# 🧪 DEBUG (PODE REMOVER DEPOIS)
+# ================================
+st.write("UF únicos:", df["uf"].unique())
+st.write("Cidade API exemplo:", df["cidade_api"].head())
+
+# ================================
+# 📍 FILTRO SC ROBUSTO
+# ================================
+if "cidade_api" not in df.columns:
+    df["cidade_api"] = ""
+
+if "cidade" not in df.columns:
+    df["cidade"] = ""
+
+df["cidade_api"] = df["cidade_api"].astype(str).str.upper()
+df["cidade"] = df["cidade"].astype(str).str.upper()
+
+df = df[
+    (df["uf"] == "SC") |
+    (df["cidade_api"].isin(CIDADES_SC)) |
+    (df["cidade"].isin(CIDADES_SC))
+]
+
+if df.empty:
+    st.warning("Nenhuma empresa de SC encontrada")
+    st.stop()
+
         if df_api.empty:
             st.error("Nenhuma empresa encontrada na Receita")
             st.stop()
@@ -229,11 +331,26 @@ with aba1:
         # ================================
         # 📍 FILTRO SC
         # ================================
-        df = df[df["uf"] == "SC"]
+       # garantir colunas seguras
+if "cidade_api" not in df.columns:
+    df["cidade_api"] = ""
 
-        if df.empty:
-            st.warning("Nenhuma empresa de SC encontrada")
-            st.stop()
+if "cidade" not in df.columns:
+    df["cidade"] = ""
+
+df["cidade_api"] = df["cidade_api"].astype(str).str.upper()
+df["cidade"] = df["cidade"].astype(str).str.upper()
+
+# filtro SC robusto
+df = df[
+    (df["uf"] == "SC") |
+    (df["cidade_api"].isin(CIDADES_SC)) |
+    (df["cidade"].isin(CIDADES_SC))
+]
+
+if df.empty:
+    st.warning("Nenhuma empresa de SC encontrada")
+    st.stop()
 
         # ================================
         # 📊 RANKING POR CIDADE
