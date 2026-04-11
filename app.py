@@ -75,25 +75,18 @@ CIDADES_SC = [ "ABDON BATISTA","ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA
 # 📂 LEITURA FORTE CSV
 # ================================
 def carregar_arquivo(file):
-    try:
-        if file.name.endswith(".csv"):
+   df.columns = df.columns.astype(str).str.strip()
 
-            try:
-                return pd.read_csv(file, sep=';', encoding='latin1')
-            except:
-                for enc in ["utf-8", "ISO-8859-1"]:
-                    try:
-                        return pd.read_csv(file, sep=';', encoding=enc)
-                    except:
-                        continue
-            return None
+# 🔍 detectar coluna de cidade automaticamente
+col_cidade = None
+for c in df.columns:
+    if "CIDADE" in c.upper() or "MUNICIP" in c.upper():
+        col_cidade = c
+        break
 
-        else:
-            return pd.read_excel(file, engine="openpyxl")
-
-    except Exception as e:
-        st.error(f"Erro ao ler arquivo: {e}")
-        return None
+# DEBUG (APARECE NA TELA)
+st.write("📌 Colunas:", df.columns.tolist())
+st.write("📌 Coluna cidade detectada:", col_cidade)
 
 # ================================
 # 🚀 API CNPJ
@@ -125,12 +118,28 @@ def consultar_cnpj(cnpj):
 def aplicar_filtros(df, usar_sc=False, cidade=None):
     df = df.copy()
 
-    if usar_sc and "Estado" in df.columns:
-        df = df[df["Estado"].astype(str).str.upper().str.contains("SC|SANTA CATARINA", na=False)]
+    # 🔍 detectar coluna de cidade automaticamente
+    col_cidade = None
+    for c in df.columns:
+        if "CIDADE" in c.upper() or "MUNICIP" in c.upper():
+            col_cidade = c
+            break
 
-    if cidade != "Todas" and "Cidade" in df.columns:
-        df["Cidade"] = df["Cidade"].astype(str).str.upper()
-        df = df[df["Cidade"] == cidade]
+    # 🔍 detectar coluna de estado
+    col_estado = None
+    for c in df.columns:
+        if "ESTADO" in c.upper() or "UF" in c.upper():
+            col_estado = c
+            break
+
+    # filtro SC
+    if usar_sc and col_estado:
+        df = df[df[col_estado].astype(str).str.upper().str.contains("SC|SANTA CATARINA", na=False)]
+
+    # filtro cidade
+    if cidade != "Todas" and col_cidade:
+        df[col_cidade] = df[col_cidade].astype(str).str.upper().str.strip()
+        df = df[df[col_cidade] == cidade]
 
     return df
 
