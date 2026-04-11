@@ -2,47 +2,20 @@ import streamlit as st
 import pandas as pd
 import requests
 import time
-from io import BytesIO
-from reportlab.platypus import SimpleDocTemplate, Paragraph
-from reportlab.lib.styles import getSampleStyleSheet
 
 st.set_page_config(layout="wide")
 
-st.title("📊 Sistema Inteligente Empresas + FAP PRO")
+st.title("📊 Sistema Inteligente Empresas + FAP")
 
 # ================================
-# 🚀 API COM CACHE
-# ================================
-@st.cache_data(ttl=86400)
-def consultar_cnpj(cnpj):
-    try:
-        url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
-        r = requests.get(url, timeout=3)
-
-        if r.status_code == 200:
-            data = r.json()
-
-            return {
-                "empresa": data.get("razao_social"),
-                "fantasia": data.get("nome_fantasia"),
-                "telefone": data.get("ddd_telefone_1"),
-                "cidade": data.get("municipio"),
-                "uf": data.get("uf"),
-                "socios": ", ".join([q.get("nome_socio","") for q in data.get("qsa",[])])
-            }
-    except:
-        pass
-
-    return None
-
-# ================================
-# 📂 LEITURA INTELIGENTE
+# 📂 LEITURA SEGURA
 # ================================
 def carregar_arquivo(file):
     try:
         if file.name.endswith(".csv"):
             return pd.read_csv(file, sep=';', encoding='latin1')
-        return pd.read_excel(file)
+        else:
+            return pd.read_excel(file)
     except:
         return None
 
@@ -56,34 +29,33 @@ def detectar_cnpj(df):
     return None
 
 # ================================
-# 📊 FAP REAL
+# 🚀 API SEGURA
 # ================================
-def calcular_fap_valores(folha, rat, fap_atual, fap_ideal):
+@st.cache_data(ttl=86400)
+def consultar_cnpj(cnpj):
+    try:
+        url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
+        r = requests.get(url, timeout=3)
 
-    atual = folha * rat * fap_atual
-    correto = folha * rat * fap_ideal
+        if r.status_code == 200:
+            data = r.json()
 
-    economia = max(atual - correto, 0)
+            return {
+                "empresa": data.get("razao_social",""),
+                "fantasia": data.get("nome_fantasia",""),
+                "telefone": data.get("ddd_telefone_1",""),
+                "cidade": data.get("municipio",""),
+                "uf": data.get("uf",""),
+                "socios": ", ".join([q.get("nome_socio","") for q in data.get("qsa",[])])
+            }
+    except:
+        pass
 
-    return {
-        "atual": atual,
-        "correto": correto,
-        "mensal": economia,
-        "anual": economia * 12,
-        "recuperavel": economia * 60
-    }
+    return None
 
 # ================================
-# 📊 RANKING + SCORE (CORRIGIDO)
+# 🎯 SCORE
 # ================================
-
-ranking = (
-    df.groupby(["CNPJ","empresa","telefone","socios","cidade"])
-    .size()
-    .reset_index(name="Afastamentos")
-)
-
-# função score
 def score_empresa(qtd):
     score = min(qtd * 5, 200)
 
@@ -96,17 +68,21 @@ def score_empresa(qtd):
 
     return pd.Series([score, nivel])
 
-# aplica score (SOMENTE DEPOIS DO RANKING EXISTIR)
-if not ranking.empty:
-    ranking[["Score", "Nivel"]] = ranking["Afastamentos"].apply(score_empresa)
-else:
-    ranking["Score"] = []
-    ranking["Nivel"] = []
+# ================================
+# 📊 FAP
+# ================================
+def calcular_fap(folha, rat, fap_atual, fap_ideal):
+    atual = folha * rat * fap_atual
+    correto = folha * rat * fap_ideal
+
+    economia = max(atual - correto, 0)
+
+    return atual, correto, economia, economia*12, economia*60
 
 # ================================
 # 📊 ABAS
 # ================================
-aba1, aba2 = st.tabs(["📊 Análise Inteligente", "🔎 Consulta + FAP"])
+aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 
 # ================================
 # 📊 ABA 1
@@ -131,6 +107,7 @@ with aba1:
             st.error("Coluna CNPJ não encontrada")
             st.stop()
 
+        # normalizar CNPJ
         df[col_cnpj] = (
             df[col_cnpj].astype(str)
             .str.replace(r"\D","",regex=True)
@@ -140,47 +117,56 @@ with aba1:
         # duplicados
         df = df[df[col_cnpj].duplicated(keep=False)]
 
+        st.info("🔄 Consultando Receita...")
+
         progress = st.progress(0)
 
-        dados_api = []
-        total = len(df[col_cnpj].unique())
-        lote = 10
+        dados_lista = []
+        cnpjs = df[col_cnpj].unique()
+        total = len(cnpjs)
 
-        for i, cnpj in enumerate(df[col_cnpj].unique()):
+        for i, cnpj in enumerate(cnpjs):
 
             dados = consultar_cnpj(cnpj)
 
-            if dados and dados["empresa"]:  # 🔥 garante empresa válida
-
-                dados_api.append({
+            if dados and dados["empresa"]:
+                dados_lista.append({
                     "CNPJ": cnpj,
                     **dados
                 })
 
-            if i % lote == 0:
-                progress.progress(i / total)
+            progress.progress((i+1)/total)
 
-        progress.progress(1.0)
+        df_api = pd.DataFrame(dados_lista)
 
-        df_api = pd.DataFrame(dados_api)
+        if df_api.empty:
+            st.error("Nenhuma empresa válida encontrada na Receita")
+            st.stop()
 
         df = df.merge(df_api, left_on=col_cnpj, right_on="CNPJ", how="inner")
 
-        # somente SC
+        # filtrar SC
         df = df[df["uf"] == "SC"]
 
-        # ranking
+        if df.empty:
+            st.warning("Nenhuma empresa de SC encontrada")
+            st.stop()
+
+        # ========================
+        # RANKING
+        # ========================
         ranking = (
             df.groupby(["CNPJ","empresa","telefone","socios","cidade"])
             .size()
             .reset_index(name="Afastamentos")
         )
 
-        ranking["Score"], ranking["Nivel"] = zip(*ranking["Afastamentos"].apply(score_empresa))
+        if not ranking.empty:
+            ranking[["Score","Nivel"]] = ranking["Afastamentos"].apply(score_empresa)
 
-        # ====================
+        # ========================
         # DASHBOARD
-        # ====================
+        # ========================
         st.success("Processamento concluído")
 
         c1, c2, c3 = st.columns(3)
@@ -188,27 +174,24 @@ with aba1:
         c2.metric("Registros", df.shape[0])
         c3.metric("SC", ranking.shape[0])
 
-        st.markdown("## 📊 Ranking Inteligente")
-
+        st.markdown("## 📊 Ranking")
         st.dataframe(ranking, use_container_width=True)
 
         st.bar_chart(ranking.set_index("empresa")["Afastamentos"])
 
-        st.markdown("## 📋 Base Completa")
+        st.markdown("## 📋 Dados")
         st.dataframe(df, use_container_width=True)
 
 # ================================
-# 🔎 ABA 2 (FAP COMPLETO)
+# 🔎 ABA 2
 # ================================
 with aba2:
 
-    st.subheader("Consulta + Cálculo FAP")
+    cnpj_input = st.text_input("Digite o CNPJ")
 
-    cnpj = st.text_input("Digite o CNPJ")
+    if cnpj_input:
 
-    if cnpj:
-
-        cnpj = ''.join(filter(str.isdigit, cnpj)).zfill(14)
+        cnpj = ''.join(filter(str.isdigit, cnpj_input)).zfill(14)
 
         dados = consultar_cnpj(cnpj)
 
@@ -223,36 +206,20 @@ with aba2:
 
             st.markdown("### 📊 Simulação FAP")
 
-            folha = st.number_input("Folha salarial mensal")
+            folha = st.number_input("Folha salarial")
             rat = st.number_input("RAT (ex: 0.02)")
             fap_atual = st.number_input("FAP atual", 0.5, 2.0)
             fap_ideal = st.number_input("FAP ideal", 0.5, 2.0)
 
             if st.button("Calcular"):
 
-                res = calcular_fap_valores(folha, rat, fap_atual, fap_ideal)
-
-                st.success(f"Economia mensal: R$ {res['mensal']:.2f}")
-                st.info(f"Economia anual: R$ {res['anual']:.2f}")
-                st.warning(f"Recuperável 5 anos: R$ {res['recuperavel']:.2f}")
-
-                # PDF
-                buffer = BytesIO()
-                doc = SimpleDocTemplate(buffer)
-                styles = getSampleStyleSheet()
-
-                story = [
-                    Paragraph(f"Empresa: {dados['empresa']}", styles["Normal"]),
-                    Paragraph(f"Economia mensal: R$ {res['mensal']:.2f}", styles["Normal"]),
-                    Paragraph(f"Recuperável: R$ {res['recuperavel']:.2f}", styles["Normal"]),
-                ]
-
-                doc.build(story)
-
-                st.download_button(
-                    "📄 Baixar PDF",
-                    buffer.getvalue(),
-                    "relatorio.pdf"
+                atual, correto, mensal, anual, recuperavel = calcular_fap(
+                    folha, rat, fap_atual, fap_ideal
                 )
+
+                st.success(f"Economia mensal: R$ {mensal:.2f}")
+                st.info(f"Economia anual: R$ {anual:.2f}")
+                st.warning(f"Recuperável 5 anos: R$ {recuperavel:.2f}")
+
         else:
             st.error("CNPJ não encontrado")
