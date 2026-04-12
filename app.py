@@ -202,21 +202,43 @@ if file and st.button("🚀 Processar"):
 
     tabela_container = st.empty()
 
-    for i in range(0, total, BLOCO):
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        bloco = cnpjs[i:i+BLOCO]
-        status.markdown(f"### 🔄 Lote {int(i/BLOCO)+1}")
+st.markdown("## 🔄 Consultando Receita (modo turbo)...")
 
-        for cnpj in bloco:
+progress = st.progress(0)
 
-            dados = consultar_com_retry(cnpj)
+dados_lista = []
+falhas = []
 
-            if dados:
-                dados_lista.append({"CNPJ": cnpj, **dados})
-            else:
-                falhas.append(cnpj)
+cnpjs = agrupado[col_cnpj].tolist()
+total = len(cnpjs)
 
-        progresso = int((min(i+BLOCO, total) / total) * 100)
+MAX_THREADS = 10
+
+def consultar_unitario(cnpj):
+    try:
+        dados = consultar_cnpj(cnpj)
+        if dados.get("empresa"):
+            return {"CNPJ": cnpj, **dados}
+    except:
+        pass
+    return None
+
+with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+
+    futures = {executor.submit(consultar_unitario, cnpj): cnpj for cnpj in cnpjs}
+
+    for i, future in enumerate(as_completed(futures)):
+
+        resultado = future.result()
+
+        if resultado:
+            dados_lista.append(resultado)
+        else:
+            falhas.append(futures[future])
+
+        progresso = int(((i+1)/total)*100)
         progress.progress(progresso)
 
         df_api_parcial = pd.DataFrame(dados_lista)
@@ -265,6 +287,17 @@ if file and st.button("🚀 Processar"):
             right_on="CNPJ",
             how="left"
         )
+        
+final["uf"] = final["uf"].fillna("").astype(str).str.upper()
+final = final[final["uf"] == "SC"]
+
+
+# ================================
+# 🔒 BLOQUEIO TOTAL SC
+# ================================
+final["uf"] = final["uf"].fillna("").astype(str).str.upper()
+
+final = final[final["uf"] == "SC"]
 
     ranking = final.sort_values("Afastamentos", ascending=False)
 
