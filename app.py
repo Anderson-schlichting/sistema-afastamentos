@@ -1,12 +1,3 @@
-import streamlit as st
-import pandas as pd
-import requests
-import time
-import os
-
-st.set_page_config(layout="wide")
-
-st.title("📊 Sistema Inteligente Empresas + FAP")
 
 # ================================
 # 📊 ABAS
@@ -18,14 +9,14 @@ aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
 with aba1:
 
-st.subheader("📊 Prospecção Inteligente - Santa Catarina")
+    st.subheader("📊 Prospecção Inteligente - Santa Catarina")
 
-import os
-import time
-import requests
-import pandas as pd
+    import os
+    import time
+    import requests
+    import pandas as pd
 
-CACHE_FILE = "cnpj_cache.csv"
+    CACHE_FILE = "cnpj_cache.csv"
 
 # ================================
 # 📍 LISTA SC
@@ -99,119 +90,122 @@ CIDADES_SC = [
 "XAVANTINA","XAXIM","ZORTÉA"
 ]
 
-# ================================
-# FUNÇÕES
-# ================================
-def consultar_cnpj(cnpj):
-    try:
-        r = requests.get(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}", timeout=5)
-        if r.status_code == 200:
-            data = r.json()
-            return {
-                "empresa": data.get("razao_social",""),
-                "telefone": data.get("ddd_telefone_1",""),
-                "cidade_api": data.get("municipio",""),
-                "uf": data.get("uf",""),
-                "socios": ", ".join([q.get("nome_socio","") for q in data.get("qsa",[])])
-            }
-    except:
-        pass
-    return {}
+    # ================================
+    # FUNÇÕES
+    # ================================
+    def consultar_cnpj(cnpj):
+        try:
+            r = requests.get(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}", timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                return {
+                    "empresa": data.get("razao_social",""),
+                    "telefone": data.get("ddd_telefone_1",""),
+                    "cidade_api": data.get("municipio",""),
+                    "uf": data.get("uf",""),
+                    "socios": ", ".join([q.get("nome_socio","") for q in data.get("qsa",[])])
+                }
+        except:
+            pass
+        return {}
 
-def score(qtd):
-    if qtd >= 30:
-        return "🔴 QUENTE"
-    elif qtd >= 15:
-        return "🟠 MÉDIO"
-    return "🟢 FRIO"
+    def score(qtd):
+        if qtd >= 30:
+            return "🔴 QUENTE"
+        elif qtd >= 15:
+            return "🟠 MÉDIO"
+        return "🟢 FRIO"
 
-def calcular_valores(qtd):
-    economia = qtd * 300
-    contrato = economia * 0.2
-    return economia, contrato
+    def limpar_tel(t):
+        return str(t).replace("(","").replace(")","").replace("-","").replace(" ","")
 
-def limpar_tel(t):
-    return str(t).replace("(","").replace(")","").replace("-","").replace(" ","")
+    # ================================
+    # UPLOAD
+    # ================================
+    file = st.file_uploader("Envie CSV ou Excel")
 
-# ================================
-# UPLOAD
-# ================================
-file = st.file_uploader("Envie CSV ou Excel")
+    if file and st.button("🚀 Processar"):
 
-if file and st.button("🚀 Processar"):
-
-    try:
-        # ================================
-        # LEITURA
-        # ================================
-        df = pd.read_csv(file, sep=';', encoding='latin1') if file.name.endswith(".csv") else pd.read_excel(file)
-
-        df.columns = df.columns.astype(str)
-
-        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
-
-        df[col_cnpj] = (
-            df[col_cnpj]
-            .astype(str)
-            .str.replace(r"\D","",regex=True)
-            .str.zfill(14)
-        )
-
-        # ================================
-        # FILTRO SC
-        # ================================
-        col_cidade = [c for c in df.columns if "CIDADE" in c.upper() or "MUNIC" in c.upper()]
-        if col_cidade:
-            df["cidade"] = df[col_cidade[0]].astype(str).str.upper()
-            df = df[df["cidade"].isin(CIDADES_SC)]
-
-        if df.empty:
-            st.warning("Nenhuma empresa SC encontrada")
-            st.stop()
-
-        st.success(f"{len(df)} registros encontrados em SC")
-
-        # ================================
-        # AGRUPAMENTO
-        # ================================
-        agrupado = df.groupby(col_cnpj).size().reset_index(name="Afastamentos")
-        agrupado["Score"] = agrupado["Afastamentos"].apply(score)
-
-        ranking = agrupado.sort_values("Afastamentos", ascending=False)
-
-        st.markdown("## ⚡ Ranking inicial")
-        st.dataframe(ranking.head(50), use_container_width=True)
-
-        # ================================
-        # CACHE
-        # ================================
-        if os.path.exists(CACHE_FILE):
-            cache_df = pd.read_csv(CACHE_FILE)
-        else:
-            cache_df = pd.DataFrame(columns=["CNPJ","empresa","telefone","cidade_api","uf","socios"])
-
-        dados_lista = []
-        consultar = []
-
-        for cnpj in ranking[col_cnpj]:
-
-            match = cache_df[cache_df["CNPJ"] == cnpj]
-
-            if not match.empty and pd.notna(match.iloc[0]["empresa"]) and match.iloc[0]["empresa"] != "":
-                dados_lista.append(match.iloc[0].to_dict())
+        try:
+            # ================================
+            # LEITURA
+            # ================================
+            if file.name.endswith(".csv"):
+                df = pd.read_csv(file, sep=';', encoding='latin1')
             else:
-                consultar.append(cnpj)
+                df = pd.read_excel(file)
 
-        st.info(f"📦 Cache: {len(dados_lista)} | 🔄 Consultar: {len(consultar)}")
+            df.columns = df.columns.astype(str)
 
-        # ================================
-        # CONSULTA API
-        # ================================
-        progress = st.progress(0)
+            # ================================
+            # CNPJ
+            # ================================
+            col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
-        for i, cnpj in enumerate(consultar[:150]):  # limite
+            df[col_cnpj] = (
+                df[col_cnpj]
+                .astype(str)
+                .str.replace(r"\D","",regex=True)
+                .str.zfill(14)
+            )
 
-            for tentativa in range(2):
+            # ================================
+            # FILTRO SC (INICIAL)
+            # ================================
+            col_cidade = [c for c in df.columns if "CIDADE" in c.upper() or "MUNIC" in c.upper()]
+
+            if col_cidade:
+                df["cidade"] = df[col_cidade[0]].astype(str).str.upper()
+                df = df[df["cidade"].isin(CIDADES_SC)]
+
+            if df.empty:
+                st.warning("Nenhuma empresa encontrada em SC")
+                st.stop()
+
+            st.success(f"{len(df)} registros encontrados em SC")
+
+            # ================================
+            # AGRUPAMENTO
+            # ================================
+            agrupado = df.groupby(col_cnpj).size().reset_index(name="Afastamentos")
+            agrupado["Score"] = agrupado["Afastamentos"].apply(score)
+
+            ranking = agrupado.sort_values("Afastamentos", ascending=False)
+
+            st.markdown("## ⚡ Ranking inicial")
+            st.dataframe(ranking.head(50), use_container_width=True)
+
+            # ================================
+            # CACHE
+            # ================================
+            if os.path.exists(CACHE_FILE):
+                cache_df = pd.read_csv(CACHE_FILE)
+            else:
+                cache_df = pd.DataFrame(columns=["CNPJ","empresa","telefone","cidade_api","uf","socios"])
+
+            dados_lista = []
+            consultar = []
+
+            for cnpj in ranking[col_cnpj]:
+
+                match = cache_df[cache_df["CNPJ"] == cnpj]
+
+                if not match.empty and pd.notna(match.iloc[0]["empresa"]) and match.iloc[0]["empresa"] != "":
+                    dados_lista.append(match.iloc[0].to_dict())
+                else:
+                    consultar.append(cnpj)
+
+            st.info(f"📦 Cache: {len(dados_lista)} | 🔄 Consultar: {len(consultar)}")
+
+            # ================================
+            # CONSULTA API
+            # ================================
+            progress = st.progress(0)
+
+            total = min(len(consultar), 100)
+
+            for i, cnpj in enumerate(consultar[:100]):
+
                 dados = consultar_cnpj(cnpj)
 
                 if dados and dados.get("empresa"):
@@ -219,80 +213,57 @@ if file and st.button("🚀 Processar"):
                     dados_lista.append(registro)
 
                     cache_df = pd.concat([cache_df, pd.DataFrame([registro])], ignore_index=True)
-                    break
 
-                time.sleep(0.3)
+                progress.progress(int((i+1)/total * 100))
+                time.sleep(0.2)
 
-            progress.progress(int((i+1)/len(consultar[:150]) * 100))
+            cache_df.drop_duplicates(subset=["CNPJ"], inplace=True)
+            cache_df.to_csv(CACHE_FILE, index=False)
 
-        cache_df.drop_duplicates(subset=["CNPJ"], inplace=True)
-        cache_df.to_csv(CACHE_FILE, index=False)
+            # ================================
+            # FINAL
+            # ================================
+            df_api = pd.DataFrame(dados_lista)
 
-        # ================================
-        # FINAL
-        # ================================
-        df_api = pd.DataFrame(dados_lista)
+            final = ranking.merge(
+                df_api,
+                left_on=col_cnpj,
+                right_on="CNPJ",
+                how="left"
+            )
 
-        final = ranking.merge(
-            df_api,
-            left_on=col_cnpj,
-            right_on="CNPJ",
-            how="left"
-        )
+            if "uf" in final.columns:
+                final["uf"] = final["uf"].fillna("").str.upper()
+                final = final[final["uf"] == "SC"]
 
-        if "uf" in final.columns:
-            final["uf"] = final["uf"].fillna("").str.upper()
-            final = final[final["uf"] == "SC"]
+            final["empresa"] = final["empresa"].fillna("NÃO ENCONTRADO")
+            final["telefone"] = final["telefone"].fillna("")
+            final["socios"] = final["socios"].fillna("")
 
-        final["empresa"] = final["empresa"].fillna("NÃO ENCONTRADO")
-        final["telefone"] = final["telefone"].fillna("")
-        final["socios"] = final["socios"].fillna("")
+            st.markdown("## 📊 Ranking Final")
+            st.dataframe(final, use_container_width=True)
 
-        # ================================
-        # COMERCIAL
-        # ================================
-        final["Economia"] = final["Afastamentos"].apply(lambda x: calcular_valores(x)[0])
-        final["Contrato"] = final["Afastamentos"].apply(lambda x: calcular_valores(x)[1])
+            # ================================
+            # LEADS
+            # ================================
+            st.markdown("## 📋 Leads")
 
-        st.markdown("## 📊 Ranking Completo")
-        st.dataframe(final, use_container_width=True)
+            for _, row in final.head(20).iterrows():
 
-        # ================================
-        # POR CIDADE
-        # ================================
-        st.markdown("## 🏙️ Ranking por Cidade")
+                tel = limpar_tel(row.get("telefone",""))
 
-        cidade_rank = final.groupby("cidade_api").size().reset_index(name="Empresas")
-        cidade_rank = cidade_rank.sort_values("Empresas", ascending=False)
+                st.write(f"🏢 {row['empresa']}")
+                st.write(f"📍 {row.get('cidade_api','')}")
+                st.write(f"👥 {row['socios']}")
+                st.write(f"📊 {row['Afastamentos']} | {row['Score']}")
 
-        st.dataframe(cidade_rank)
-        st.bar_chart(cidade_rank.set_index("cidade_api"))
+                if tel and tel != "nan":
+                    st.markdown(f"[📲 WhatsApp](https://wa.me/55{tel})")
 
-        # ================================
-        # LEADS
-        # ================================
-        st.markdown("## 📋 Leads Prontos")
+                st.divider()
 
-        for _, row in final.head(20).iterrows():
-
-            tel = limpar_tel(row.get("telefone",""))
-
-            msg = f"Olá, analisamos sua empresa {row['empresa']} e identificamos possível economia com FAP de R$ {row['Economia']:.2f}. Podemos te explicar?"
-
-            st.write(f"🏢 {row['empresa']}")
-            st.write(f"📍 {row.get('cidade_api','')}")
-            st.write(f"👥 {row['socios']}")
-            st.write(f"📊 {row['Afastamentos']} | {row['Score']}")
-            st.write(f"💰 Economia: R$ {row['Economia']:.2f}")
-            st.write(f"💼 Contrato: R$ {row['Contrato']:.2f}")
-
-            if tel and tel != "nan":
-                st.markdown(f"[📲 WhatsApp](https://wa.me/55{tel}?text={msg})")
-
-            st.divider()
-
-    except Exception as e:
-        st.error(f"Erro no sistema: {e}")
+        except Exception as e:
+            st.error(f"Erro: {e}")
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
