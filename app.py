@@ -88,10 +88,10 @@ CIDADES_SC = [
 "URUPEMA","URUSSANGA","VARGEÃO","VARGEM","VARGEM BONITA",
 "VIDAL RAMOS","VIDEIRA","VITOR MEIRELES","WITMARSUM","XANXERÊ",
 "XAVANTINA","XAXIM","ZORTÉA"
-]
+    ]
 
     # ================================
-    # FUNÇÕES
+    # FUNÇÕES (ALINHADAS CORRETAMENTE)
     # ================================
     def consultar_cnpj(cnpj):
         try:
@@ -127,9 +127,7 @@ CIDADES_SC = [
     if file and st.button("🚀 Processar"):
 
         try:
-            # ================================
-            # LEITURA
-            # ================================
+            # leitura
             if file.name.endswith(".csv"):
                 df = pd.read_csv(file, sep=';', encoding='latin1')
             else:
@@ -137,9 +135,7 @@ CIDADES_SC = [
 
             df.columns = df.columns.astype(str)
 
-            # ================================
             # CNPJ
-            # ================================
             col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
             df[col_cnpj] = (
@@ -149,31 +145,25 @@ CIDADES_SC = [
                 .str.zfill(14)
             )
 
-            # ================================
-            # FILTRO SC (INICIAL)
-            # ================================
+            # cidade
             col_cidade = [c for c in df.columns if "CIDADE" in c.upper() or "MUNIC" in c.upper()]
-
             if col_cidade:
                 df["cidade"] = df[col_cidade[0]].astype(str).str.upper()
                 df = df[df["cidade"].isin(CIDADES_SC)]
 
             if df.empty:
-                st.warning("Nenhuma empresa encontrada em SC")
+                st.warning("Nenhuma empresa SC encontrada")
                 st.stop()
 
             st.success(f"{len(df)} registros encontrados em SC")
 
-            # ================================
-            # AGRUPAMENTO
-            # ================================
+            # agrupamento
             agrupado = df.groupby(col_cnpj).size().reset_index(name="Afastamentos")
             agrupado["Score"] = agrupado["Afastamentos"].apply(score)
 
             ranking = agrupado.sort_values("Afastamentos", ascending=False)
 
-            st.markdown("## ⚡ Ranking inicial")
-            st.dataframe(ranking.head(50), use_container_width=True)
+            st.dataframe(ranking.head(50))
 
             # ================================
             # CACHE
@@ -187,24 +177,21 @@ CIDADES_SC = [
             consultar = []
 
             for cnpj in ranking[col_cnpj]:
-
                 match = cache_df[cache_df["CNPJ"] == cnpj]
 
-                if not match.empty and pd.notna(match.iloc[0]["empresa"]) and match.iloc[0]["empresa"] != "":
+                if not match.empty and pd.notna(match.iloc[0]["empresa"]):
                     dados_lista.append(match.iloc[0].to_dict())
                 else:
                     consultar.append(cnpj)
 
-            st.info(f"📦 Cache: {len(dados_lista)} | 🔄 Consultar: {len(consultar)}")
-
             # ================================
-            # CONSULTA API
+            # API
             # ================================
             progress = st.progress(0)
 
-            total = min(len(consultar), 100)
+            total = min(len(consultar), 50)
 
-            for i, cnpj in enumerate(consultar[:100]):
+            for i, cnpj in enumerate(consultar[:50]):
 
                 dados = consultar_cnpj(cnpj)
 
@@ -220,9 +207,7 @@ CIDADES_SC = [
             cache_df.drop_duplicates(subset=["CNPJ"], inplace=True)
             cache_df.to_csv(CACHE_FILE, index=False)
 
-            # ================================
-            # FINAL
-            # ================================
+            # final
             df_api = pd.DataFrame(dados_lista)
 
             final = ranking.merge(
@@ -236,31 +221,7 @@ CIDADES_SC = [
                 final["uf"] = final["uf"].fillna("").str.upper()
                 final = final[final["uf"] == "SC"]
 
-            final["empresa"] = final["empresa"].fillna("NÃO ENCONTRADO")
-            final["telefone"] = final["telefone"].fillna("")
-            final["socios"] = final["socios"].fillna("")
-
-            st.markdown("## 📊 Ranking Final")
-            st.dataframe(final, use_container_width=True)
-
-            # ================================
-            # LEADS
-            # ================================
-            st.markdown("## 📋 Leads")
-
-            for _, row in final.head(20).iterrows():
-
-                tel = limpar_tel(row.get("telefone",""))
-
-                st.write(f"🏢 {row['empresa']}")
-                st.write(f"📍 {row.get('cidade_api','')}")
-                st.write(f"👥 {row['socios']}")
-                st.write(f"📊 {row['Afastamentos']} | {row['Score']}")
-
-                if tel and tel != "nan":
-                    st.markdown(f"[📲 WhatsApp](https://wa.me/55{tel})")
-
-                st.divider()
+            st.dataframe(final)
 
         except Exception as e:
             st.error(f"Erro: {e}")
