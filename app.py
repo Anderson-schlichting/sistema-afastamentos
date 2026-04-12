@@ -95,6 +95,9 @@ CACHE_FILE = "cnpj_cache.csv"
 
 file = st.file_uploader("Envie CSV ou Excel")
 
+# ================================
+# 📂 FUNÇÕES
+# ================================
 def carregar_arquivo(file):
     try:
         if file.name.endswith(".csv"):
@@ -133,6 +136,9 @@ def consultar_cnpj(cnpj):
         pass
     return {}
 
+# ================================
+# 🚀 PROCESSAMENTO
+# ================================
 if file and st.button("🚀 Processar"):
 
     df = carregar_arquivo(file)
@@ -171,7 +177,7 @@ if file and st.button("🚀 Processar"):
 
     df["cidade"] = df["cidade"].astype(str).str.upper()
 
-    # 🔎 filtro SC inicial
+    # 🔎 filtro inicial SC
     df = df[df["cidade"].isin(CIDADES_SC)]
 
     if df.empty:
@@ -203,18 +209,24 @@ if file and st.button("🚀 Processar"):
     for cnpj in ranking[col_cnpj]:
 
         if not cache_df.empty and cnpj in cache_df["CNPJ"].values:
-            dados = cache_df[cache_df["CNPJ"] == cnpj].iloc[0].to_dict()
-            dados_lista.append(dados)
+
+            registro = cache_df[cache_df["CNPJ"] == cnpj].iloc[0]
+
+            # 🔴 valida cache (ESSENCIAL)
+            if pd.notna(registro.get("empresa")) and registro.get("empresa") != "":
+                dados_lista.append(registro.to_dict())
+            else:
+                consultar.append(cnpj)
+
         else:
             consultar.append(cnpj)
 
-    st.markdown(f"📦 Cache: {len(dados_lista)} já carregados | 🔄 {len(consultar)} novos")
+    st.write(f"📦 Cache válido: {len(dados_lista)} | 🔄 Consultar: {len(consultar)}")
 
     # ================================
-    # 🔄 CONSULTA INTELIGENTE
+    # 🔄 CONSULTA API
     # ================================
     progress = st.progress(0)
-    tabela_container = st.empty()
 
     total = len(consultar)
     BLOCO = 5
@@ -239,37 +251,23 @@ if file and st.button("🚀 Processar"):
         progresso = int((min(i+BLOCO, total)/total)*100)
         progress.progress(progresso)
 
-        # 🔥 atualização parcial
-        if dados_lista:
-
-            df_api = pd.DataFrame(dados_lista)
-
-            parcial = ranking.merge(
-                df_api,
-                left_on=col_cnpj,
-                right_on="CNPJ",
-                how="left"
-            )
-
-            parcial["uf"] = parcial["uf"].fillna("").astype(str).str.upper()
-            parcial = parcial[parcial["uf"] == "SC"]
-
-            with tabela_container:
-                st.dataframe(parcial.head(50), use_container_width=True)
-
-    # salvar cache
+    # 🔴 limpar duplicados
+    cache_df = cache_df.drop_duplicates(subset=["CNPJ"])
     cache_df.to_csv(CACHE_FILE, index=False)
 
     # ================================
-    # 📊 FINAL
+    # 🔗 FINAL
     # ================================
+    df_api = pd.DataFrame(dados_lista)
+
     final = ranking.merge(
-        pd.DataFrame(dados_lista),
+        df_api,
         left_on=col_cnpj,
         right_on="CNPJ",
         how="left"
     )
 
+    # 🔒 filtro SC correto
     final["uf"] = final["uf"].fillna("").astype(str).str.upper()
     final = final[final["uf"] == "SC"]
 
@@ -302,8 +300,9 @@ if file and st.button("🚀 Processar"):
 
         tel = str(row.get("telefone","")).replace("(","").replace(")","").replace("-","").replace(" ","")
 
-        st.write(f"🏢 {row.get('empresa','')}")
+        st.write(f"🏢 {row.get('empresa','SEM DADOS')}")
         st.write(f"📍 {row.get('cidade_api','')}")
+        st.write(f"👥 {row.get('socios','')}")
         st.write(f"📊 {row['Afastamentos']} afastamentos")
 
         if tel and tel != "nan":
