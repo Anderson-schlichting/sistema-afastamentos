@@ -93,7 +93,7 @@ CIDADES_SC = [
     # ================================
     # FUNÇÕES (AGORA NO LUGAR CERTO)
     # ================================
-    def consultar_cnpj(cnpj):
+   dados = consultar_cnpj_api(cnpj)
         try:
             url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
             r = requests.get(url, timeout=5)
