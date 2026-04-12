@@ -148,9 +148,7 @@ if file and st.button("🚀 Processar"):
         st.error("Coluna CNPJ não encontrada")
         st.stop()
 
-    # ================================
-    # 🔢 NORMALIZAR CNPJ (14 DÍGITOS)
-    # ================================
+    # 🔢 CNPJ 14 dígitos
     df[col_cnpj] = (
         df[col_cnpj]
         .astype(str)
@@ -158,9 +156,7 @@ if file and st.button("🚀 Processar"):
         .str.zfill(14)
     )
 
-    # ================================
-    # 📍 CIDADE
-    # ================================
+    # 📍 cidade
     col_cidade = None
     for c in df.columns:
         if "MUNIC" in c.upper() or "CIDADE" in c.upper():
@@ -174,9 +170,6 @@ if file and st.button("🚀 Processar"):
 
     df["cidade"] = df["cidade"].astype(str).str.upper()
 
-    # ================================
-    # 📍 FILTRO SC INICIAL
-    # ================================
     df = df[df["cidade"].isin(CIDADES_SC)]
 
     if df.empty:
@@ -185,14 +178,8 @@ if file and st.button("🚀 Processar"):
 
     st.success(f"{len(df)} registros encontrados em SC")
 
-    # ================================
-    # 📊 AGRUPAMENTO
-    # ================================
     agrupado = df.groupby(col_cnpj).size().reset_index(name="Afastamentos")
 
-    # ================================
-    # 🔄 CONSULTA
-    # ================================
     st.markdown("## 🔄 Consultando Receita...")
 
     progress = st.progress(0)
@@ -203,8 +190,7 @@ if file and st.button("🚀 Processar"):
 
     cnpjs = agrupado[col_cnpj].tolist()
     total = len(cnpjs)
-
-    BLOCO = 10  # 👈 MAIS ESTÁVEL
+    BLOCO = 10
 
     def consultar_com_retry(cnpj, tentativas=2):
         for _ in range(tentativas):
@@ -214,9 +200,7 @@ if file and st.button("🚀 Processar"):
             time.sleep(1)
         return None
 
-    # containers para atualização em tempo real
     tabela_container = st.empty()
-    leads_container = st.empty()
 
     for i in range(0, total, BLOCO):
 
@@ -235,9 +219,6 @@ if file and st.button("🚀 Processar"):
         progresso = int((min(i+BLOCO, total) / total) * 100)
         progress.progress(progresso)
 
-        # ================================
-        # 📊 PARCIAL
-        # ================================
         df_api_parcial = pd.DataFrame(dados_lista)
 
         if not df_api_parcial.empty:
@@ -252,51 +233,31 @@ if file and st.button("🚀 Processar"):
             ranking_parcial = parcial.sort_values("Afastamentos", ascending=False)
 
             with tabela_container:
-                st.markdown("## 📊 Ranking (parcial)")
                 st.dataframe(ranking_parcial, use_container_width=True)
 
-            with leads_container:
-                st.markdown("## 📋 Leads (parcial)")
-
-                for _, row in ranking_parcial.head(10).iterrows():
-                    st.write(f"🏢 {row['empresa']} | 📊 {row['Afastamentos']}")
-
-    # ================================
-    # 🔁 RETRY FINAL
-    # ================================
     if falhas:
         st.warning(f"🔁 Reprocessando {len(falhas)} falhas...")
 
         for cnpj in falhas:
             dados = consultar_com_retry(cnpj, tentativas=3)
-
             if dados:
                 dados_lista.append({"CNPJ": cnpj, **dados})
 
     df_api = pd.DataFrame(dados_lista)
 
-    # ================================
-    # 🔗 FINAL (MESMO SE API FALHAR)
-    # ================================
     if df_api.empty:
-
-        st.warning("API não retornou dados - exibindo base")
-
+        st.warning("API não respondeu - exibindo base")
         final = agrupado.copy()
         final["empresa"] = "Não encontrado"
+        final["cidade_api"] = ""
+        final["uf"] = ""
         final["telefone"] = ""
         final["socios"] = ""
-        final["cidade_api"] = ""
-
     else:
+        df_api["uf"] = df_api["uf"].astype(str).str.upper()
+        df_api["cidade_api"] = df_api["cidade_api"].astype(str).str.upper()
 
-        df_api["cidade_api"] = df_api["cidade_api"].fillna("").astype(str).str.upper()
-        df_api["uf"] = df_api["uf"].fillna("").astype(str).str.upper()
-
-        df_api = df_api[
-            (df_api["uf"] == "SC") |
-            (df_api["cidade_api"].isin(CIDADES_SC))
-        ]
+        df_api = df_api[df_api["uf"] == "SC"]
 
         final = agrupado.merge(
             df_api,
@@ -308,13 +269,34 @@ if file and st.button("🚀 Processar"):
     ranking = final.sort_values("Afastamentos", ascending=False)
 
     # ================================
-    # 📊 FINAL
+    # 📊 RANKING FINAL
     # ================================
-    st.markdown("## 📊 Ranking Final")
+    st.markdown("## 📊 Ranking Geral")
     st.dataframe(ranking, use_container_width=True)
 
     # ================================
-    # 📋 LEADS FINAL
+    # 🏙️ RANKING POR CIDADE
+    # ================================
+    st.markdown("## 🏙️ Ranking por Cidade")
+
+    ranking_cidade = (
+        ranking.groupby("cidade_api")
+        .size()
+        .reset_index(name="Empresas")
+        .sort_values("Empresas", ascending=False)
+    )
+
+    st.dataframe(ranking_cidade)
+
+    # ================================
+    # 🔥 HEATMAP (VISUAL)
+    # ================================
+    st.markdown("## 🔥 Oportunidades (Top Cidades)")
+
+    st.bar_chart(ranking_cidade.set_index("cidade_api"))
+
+    # ================================
+    # 📋 LEADS
     # ================================
     st.markdown("## 📋 Leads Prioritários")
 
