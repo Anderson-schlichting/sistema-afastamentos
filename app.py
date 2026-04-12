@@ -18,12 +18,19 @@ aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
 with aba1:
 
-    st.subheader("📊 Prospecção Inteligente - SC")
+st.subheader("📊 Prospecção Inteligente - Santa Catarina")
+
+import os
+import time
+import requests
+import pandas as pd
+
+CACHE_FILE = "cnpj_cache.csv"
 
 # ================================
-# 📍 LISTA SC (FALLBACK)
+# 📍 LISTA SC
 # ================================
-CIDADES_SC = list(set([
+CIDADES_SC = [
 "ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA DOCE","ÁGUAS DE CHAPECÓ",
 "ÁGUAS FRIAS","ÁGUAS MORNAS","ALFREDO WAGNER","ALTO BELA VISTA",
 "ANCHIETA","ANGELINA","ANITA GARIBALDI","ANITÁPOLIS","ANTÔNIO CARLOS",
@@ -90,37 +97,11 @@ CIDADES_SC = list(set([
 "URUPEMA","URUSSANGA","VARGEÃO","VARGEM","VARGEM BONITA",
 "VIDAL RAMOS","VIDEIRA","VITOR MEIRELES","WITMARSUM","XANXERÊ",
 "XAVANTINA","XAXIM","ZORTÉA"
-]))
-
-CACHE_FILE = "cnpj_cache.csv"
-
-file = st.file_uploader("Envie CSV ou Excel")
+]
 
 # ================================
-# 📂 FUNÇÕES
+# FUNÇÕES
 # ================================
-def carregar_arquivo(file):
-    try:
-        if file.name.endswith(".csv"):
-            return pd.read_csv(file, sep=';', encoding='latin1')
-        return pd.read_excel(file)
-    except:
-        return None
-
-def detectar_cnpj(df):
-    for c in df.columns:
-        if "CNPJ" in c.upper():
-            return c
-    return None
-
-def limpar_cidade(valor):
-    if pd.isna(valor):
-        return ""
-    valor = str(valor)
-    if "-" in valor:
-        valor = valor.split("-", 1)[1]
-    return valor.strip().upper()
-
 def consultar_cnpj(cnpj):
     try:
         r = requests.get(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}", timeout=5)
@@ -137,179 +118,181 @@ def consultar_cnpj(cnpj):
         pass
     return {}
 
+def score(qtd):
+    if qtd >= 30:
+        return "🔴 QUENTE"
+    elif qtd >= 15:
+        return "🟠 MÉDIO"
+    return "🟢 FRIO"
+
+def calcular_valores(qtd):
+    economia = qtd * 300
+    contrato = economia * 0.2
+    return economia, contrato
+
+def limpar_tel(t):
+    return str(t).replace("(","").replace(")","").replace("-","").replace(" ","")
+
 # ================================
-# 🚀 PROCESSAMENTO
+# UPLOAD
 # ================================
+file = st.file_uploader("Envie CSV ou Excel")
+
 if file and st.button("🚀 Processar"):
 
-    df = carregar_arquivo(file)
+    try:
+        # ================================
+        # LEITURA
+        # ================================
+        df = pd.read_csv(file, sep=';', encoding='latin1') if file.name.endswith(".csv") else pd.read_excel(file)
 
-    if df is None:
-        st.error("Erro ao ler arquivo")
-        st.stop()
+        df.columns = df.columns.astype(str)
 
-    df.columns = df.columns.astype(str).str.strip()
+        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
-    col_cnpj = detectar_cnpj(df)
+        df[col_cnpj] = (
+            df[col_cnpj]
+            .astype(str)
+            .str.replace(r"\D","",regex=True)
+            .str.zfill(14)
+        )
 
-    if not col_cnpj:
-        st.error("Coluna CNPJ não encontrada")
-        st.stop()
+        # ================================
+        # FILTRO SC
+        # ================================
+        col_cidade = [c for c in df.columns if "CIDADE" in c.upper() or "MUNIC" in c.upper()]
+        if col_cidade:
+            df["cidade"] = df[col_cidade[0]].astype(str).str.upper()
+            df = df[df["cidade"].isin(CIDADES_SC)]
 
-    # 🔢 CNPJ correto
-    df[col_cnpj] = (
-        df[col_cnpj]
-        .astype(str)
-        .str.replace(r"\D","",regex=True)
-        .str.zfill(14)
-    )
+        if df.empty:
+            st.warning("Nenhuma empresa SC encontrada")
+            st.stop()
 
-    # 📍 cidade
-    col_cidade = None
-    for c in df.columns:
-        if "MUNIC" in c.upper() or "CIDADE" in c.upper():
-            col_cidade = c
-            break
+        st.success(f"{len(df)} registros encontrados em SC")
 
-    if col_cidade:
-        df["cidade"] = df[col_cidade].apply(limpar_cidade)
-    else:
-        df["cidade"] = ""
+        # ================================
+        # AGRUPAMENTO
+        # ================================
+        agrupado = df.groupby(col_cnpj).size().reset_index(name="Afastamentos")
+        agrupado["Score"] = agrupado["Afastamentos"].apply(score)
 
-    df["cidade"] = df["cidade"].astype(str).str.upper()
+        ranking = agrupado.sort_values("Afastamentos", ascending=False)
 
-    # 🔎 filtro inicial SC
-    df = df[df["cidade"].isin(CIDADES_SC)]
+        st.markdown("## ⚡ Ranking inicial")
+        st.dataframe(ranking.head(50), use_container_width=True)
 
-    if df.empty:
-        st.warning("Nenhuma empresa de SC encontrada")
-        st.stop()
+        # ================================
+        # CACHE
+        # ================================
+        if os.path.exists(CACHE_FILE):
+            cache_df = pd.read_csv(CACHE_FILE)
+        else:
+            cache_df = pd.DataFrame(columns=["CNPJ","empresa","telefone","cidade_api","uf","socios"])
 
-    st.success(f"{len(df)} registros encontrados em SC")
+        dados_lista = []
+        consultar = []
 
-    # ================================
-    # 📊 BASE IMEDIATA
-    # ================================
-    agrupado = df.groupby(col_cnpj).size().reset_index(name="Afastamentos")
-    ranking = agrupado.sort_values("Afastamentos", ascending=False)
+        for cnpj in ranking[col_cnpj]:
 
-    st.markdown("## ⚡ Resultado imediato")
-    st.dataframe(ranking.head(50), use_container_width=True)
+            match = cache_df[cache_df["CNPJ"] == cnpj]
 
-    # ================================
-    # 📂 CACHE
-    # ================================
-    if os.path.exists(CACHE_FILE):
-        cache_df = pd.read_csv(CACHE_FILE)
-    else:
-        cache_df = pd.DataFrame()
-
-    dados_lista = []
-    consultar = []
-
-    for cnpj in ranking[col_cnpj]:
-
-        if not cache_df.empty and cnpj in cache_df["CNPJ"].values:
-
-            registro = cache_df[cache_df["CNPJ"] == cnpj].iloc[0]
-
-            # 🔴 valida cache (ESSENCIAL)
-            if pd.notna(registro.get("empresa")) and registro.get("empresa") != "":
-                dados_lista.append(registro.to_dict())
+            if not match.empty and pd.notna(match.iloc[0]["empresa"]) and match.iloc[0]["empresa"] != "":
+                dados_lista.append(match.iloc[0].to_dict())
             else:
                 consultar.append(cnpj)
 
-        else:
-            consultar.append(cnpj)
+        st.info(f"📦 Cache: {len(dados_lista)} | 🔄 Consultar: {len(consultar)}")
 
-    st.write(f"📦 Cache válido: {len(dados_lista)} | 🔄 Consultar: {len(consultar)}")
+        # ================================
+        # CONSULTA API
+        # ================================
+        progress = st.progress(0)
 
-    # ================================
-    # 🔄 CONSULTA API
-    # ================================
-    progress = st.progress(0)
+        for i, cnpj in enumerate(consultar[:150]):  # limite
 
-    total = len(consultar)
-    BLOCO = 5
+            for tentativa in range(2):
+                dados = consultar_cnpj(cnpj)
 
-    for i in range(0, total, BLOCO):
+                if dados and dados.get("empresa"):
+                    registro = {"CNPJ": cnpj, **dados}
+                    dados_lista.append(registro)
 
-        bloco = consultar[i:i+BLOCO]
+                    cache_df = pd.concat([cache_df, pd.DataFrame([registro])], ignore_index=True)
+                    break
 
-        for cnpj in bloco:
+                time.sleep(0.3)
 
-            dados = consultar_cnpj(cnpj)
+            progress.progress(int((i+1)/len(consultar[:150]) * 100))
 
-            if dados.get("empresa"):
+        cache_df.drop_duplicates(subset=["CNPJ"], inplace=True)
+        cache_df.to_csv(CACHE_FILE, index=False)
 
-                registro = {"CNPJ": cnpj, **dados}
-                dados_lista.append(registro)
+        # ================================
+        # FINAL
+        # ================================
+        df_api = pd.DataFrame(dados_lista)
 
-                cache_df = pd.concat([cache_df, pd.DataFrame([registro])], ignore_index=True)
+        final = ranking.merge(
+            df_api,
+            left_on=col_cnpj,
+            right_on="CNPJ",
+            how="left"
+        )
 
-            time.sleep(0.3)
+        if "uf" in final.columns:
+            final["uf"] = final["uf"].fillna("").str.upper()
+            final = final[final["uf"] == "SC"]
 
-        progresso = int((min(i+BLOCO, total)/total)*100)
-        progress.progress(progresso)
+        final["empresa"] = final["empresa"].fillna("NÃO ENCONTRADO")
+        final["telefone"] = final["telefone"].fillna("")
+        final["socios"] = final["socios"].fillna("")
 
-    # 🔴 limpar duplicados
-    cache_df = cache_df.drop_duplicates(subset=["CNPJ"])
-    cache_df.to_csv(CACHE_FILE, index=False)
+        # ================================
+        # COMERCIAL
+        # ================================
+        final["Economia"] = final["Afastamentos"].apply(lambda x: calcular_valores(x)[0])
+        final["Contrato"] = final["Afastamentos"].apply(lambda x: calcular_valores(x)[1])
 
-    # ================================
-    # 🔗 FINAL
-    # ================================
-    df_api = pd.DataFrame(dados_lista)
+        st.markdown("## 📊 Ranking Completo")
+        st.dataframe(final, use_container_width=True)
 
-    final = ranking.merge(
-        df_api,
-        left_on=col_cnpj,
-        right_on="CNPJ",
-        how="left"
-    )
+        # ================================
+        # POR CIDADE
+        # ================================
+        st.markdown("## 🏙️ Ranking por Cidade")
 
-    # 🔒 filtro SC correto
-    final["uf"] = final["uf"].fillna("").astype(str).str.upper()
-    final = final[final["uf"] == "SC"]
+        cidade_rank = final.groupby("cidade_api").size().reset_index(name="Empresas")
+        cidade_rank = cidade_rank.sort_values("Empresas", ascending=False)
 
-    st.markdown("## 📊 Ranking Final")
-    st.dataframe(final, use_container_width=True)
+        st.dataframe(cidade_rank)
+        st.bar_chart(cidade_rank.set_index("cidade_api"))
 
-    # ================================
-    # 🏙️ POR CIDADE
-    # ================================
-    st.markdown("## 🏙️ Ranking por Cidade")
+        # ================================
+        # LEADS
+        # ================================
+        st.markdown("## 📋 Leads Prontos")
 
-    ranking_cidade = (
-        final.groupby("cidade_api")
-        .size()
-        .reset_index(name="Empresas")
-        .sort_values("Empresas", ascending=False)
-    )
+        for _, row in final.head(20).iterrows():
 
-    st.dataframe(ranking_cidade)
+            tel = limpar_tel(row.get("telefone",""))
 
-    st.markdown("## 🔥 Oportunidades")
-    st.bar_chart(ranking_cidade.set_index("cidade_api"))
+            msg = f"Olá, analisamos sua empresa {row['empresa']} e identificamos possível economia com FAP de R$ {row['Economia']:.2f}. Podemos te explicar?"
 
-    # ================================
-    # 📋 LEADS
-    # ================================
-    st.markdown("## 📋 Leads")
+            st.write(f"🏢 {row['empresa']}")
+            st.write(f"📍 {row.get('cidade_api','')}")
+            st.write(f"👥 {row['socios']}")
+            st.write(f"📊 {row['Afastamentos']} | {row['Score']}")
+            st.write(f"💰 Economia: R$ {row['Economia']:.2f}")
+            st.write(f"💼 Contrato: R$ {row['Contrato']:.2f}")
 
-    for _, row in final.head(20).iterrows():
+            if tel and tel != "nan":
+                st.markdown(f"[📲 WhatsApp](https://wa.me/55{tel}?text={msg})")
 
-        tel = str(row.get("telefone","")).replace("(","").replace(")","").replace("-","").replace(" ","")
+            st.divider()
 
-        st.write(f"🏢 {row.get('empresa','SEM DADOS')}")
-        st.write(f"📍 {row.get('cidade_api','')}")
-        st.write(f"👥 {row.get('socios','')}")
-        st.write(f"📊 {row['Afastamentos']} afastamentos")
-
-        if tel and tel != "nan":
-            st.markdown(f"[📲 WhatsApp](https://wa.me/55{tel})")
-
-        st.divider()
+    except Exception as e:
+        st.error(f"Erro no sistema: {e}")
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
