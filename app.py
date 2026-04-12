@@ -88,10 +88,10 @@ CIDADES_SC = [
 "URUPEMA","URUSSANGA","VARGEÃO","VARGEM","VARGEM BONITA",
 "VIDAL RAMOS","VIDEIRA","VITOR MEIRELES","WITMARSUM","XANXERÊ",
 "XAVANTINA","XAXIM","ZORTÉA"
-    ]
+]
 
     # ================================
-    # FUNÇÕES (ALINHADAS CORRETAMENTE)
+    # FUNÇÕES
     # ================================
     def consultar_cnpj(cnpj):
         try:
@@ -127,7 +127,6 @@ CIDADES_SC = [
     if file and st.button("🚀 Processar"):
 
         try:
-            # leitura
             if file.name.endswith(".csv"):
                 df = pd.read_csv(file, sep=';', encoding='latin1')
             else:
@@ -135,7 +134,6 @@ CIDADES_SC = [
 
             df.columns = df.columns.astype(str)
 
-            # CNPJ
             col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
             df[col_cnpj] = (
@@ -145,7 +143,7 @@ CIDADES_SC = [
                 .str.zfill(14)
             )
 
-            # cidade
+            # FILTRO SC
             col_cidade = [c for c in df.columns if "CIDADE" in c.upper() or "MUNIC" in c.upper()]
             if col_cidade:
                 df["cidade"] = df[col_cidade[0]].astype(str).str.upper()
@@ -157,7 +155,6 @@ CIDADES_SC = [
 
             st.success(f"{len(df)} registros encontrados em SC")
 
-            # agrupamento
             agrupado = df.groupby(col_cnpj).size().reset_index(name="Afastamentos")
             agrupado["Score"] = agrupado["Afastamentos"].apply(score)
 
@@ -165,9 +162,7 @@ CIDADES_SC = [
 
             st.dataframe(ranking.head(50))
 
-            # ================================
             # CACHE
-            # ================================
             if os.path.exists(CACHE_FILE):
                 cache_df = pd.read_csv(CACHE_FILE)
             else:
@@ -184,11 +179,7 @@ CIDADES_SC = [
                 else:
                     consultar.append(cnpj)
 
-            # ================================
-            # API
-            # ================================
             progress = st.progress(0)
-
             total = min(len(consultar), 50)
 
             for i, cnpj in enumerate(consultar[:50]):
@@ -207,7 +198,6 @@ CIDADES_SC = [
             cache_df.drop_duplicates(subset=["CNPJ"], inplace=True)
             cache_df.to_csv(CACHE_FILE, index=False)
 
-            # final
             df_api = pd.DataFrame(dados_lista)
 
             final = ranking.merge(
