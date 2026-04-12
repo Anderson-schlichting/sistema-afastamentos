@@ -88,10 +88,10 @@ CIDADES_SC = [
 "URUPEMA","URUSSANGA","VARGEÃO","VARGEM","VARGEM BONITA",
 "VIDAL RAMOS","VIDEIRA","VITOR MEIRELES","WITMARSUM","XANXERÊ",
 "XAVANTINA","XAXIM","ZORTÉA"
-    ]
+]
 
     # ================================
-    # FUNÇÕES
+    # FUNÇÕES (AGORA NO LUGAR CERTO)
     # ================================
     def consultar_cnpj(cnpj):
         try:
@@ -132,7 +132,6 @@ CIDADES_SC = [
     if file and st.button("🚀 Processar"):
 
         try:
-            # leitura
             if file.name.endswith(".csv"):
                 df = pd.read_csv(file, sep=';', encoding='latin1')
             else:
@@ -140,7 +139,6 @@ CIDADES_SC = [
 
             df.columns = df.columns.astype(str)
 
-            # detectar CNPJ
             col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
             df[col_cnpj] = (
@@ -150,7 +148,6 @@ CIDADES_SC = [
                 .str.zfill(14)
             )
 
-            # detectar cidade
             col_cidade = [c for c in df.columns if "CIDADE" in c.upper() or "MUNIC" in c.upper()]
 
             if col_cidade:
@@ -163,9 +160,6 @@ CIDADES_SC = [
 
             st.success(f"{len(df)} registros encontrados em SC")
 
-            # ================================
-            # AGRUPAMENTO
-            # ================================
             agrupado = df.groupby(col_cnpj).size().reset_index(name="Afastamentos")
             agrupado["Score"] = agrupado["Afastamentos"].apply(score)
 
@@ -174,9 +168,7 @@ CIDADES_SC = [
             st.markdown("## 📊 Ranking inicial")
             st.dataframe(ranking.head(50), use_container_width=True)
 
-            # ================================
             # CACHE
-            # ================================
             if os.path.exists(CACHE_FILE):
                 cache_df = pd.read_csv(CACHE_FILE)
             else:
@@ -196,9 +188,6 @@ CIDADES_SC = [
 
             st.info(f"📦 Cache: {len(dados_lista)} | 🔄 Consultar: {len(consultar)}")
 
-            # ================================
-            # CONSULTA API
-            # ================================
             progress = st.progress(0)
 
             total = min(len(consultar), 50)
@@ -219,9 +208,6 @@ CIDADES_SC = [
             cache_df.drop_duplicates(subset=["CNPJ"], inplace=True)
             cache_df.to_csv(CACHE_FILE, index=False)
 
-            # ================================
-            # FINAL
-            # ================================
             df_api = pd.DataFrame(dados_lista)
 
             final = ranking.merge(
@@ -236,30 +222,9 @@ CIDADES_SC = [
                 final = final[final["uf"] == "SC"]
 
             final["empresa"] = final["empresa"].fillna("NÃO ENCONTRADO")
-            final["telefone"] = final["telefone"].fillna("")
-            final["socios"] = final["socios"].fillna("")
 
             st.markdown("## 📊 Ranking Final")
             st.dataframe(final, use_container_width=True)
-
-            # ================================
-            # LEADS
-            # ================================
-            st.markdown("## 📋 Leads")
-
-            for _, row in final.head(20).iterrows():
-
-                tel = limpar_tel(row.get("telefone",""))
-
-                st.write(f"🏢 {row['empresa']}")
-                st.write(f"📍 {row.get('cidade_api','')}")
-                st.write(f"👥 {row['socios']}")
-                st.write(f"📊 {row['Afastamentos']} | {row['Score']}")
-
-                if tel and tel != "nan":
-                    st.markdown(f"[📲 WhatsApp](https://wa.me/55{tel})")
-
-                st.divider()
 
         except Exception as e:
             st.error(f"Erro no sistema: {e}")
