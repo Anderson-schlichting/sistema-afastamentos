@@ -3,7 +3,7 @@ import streamlit as st
 # 🔹 1. CRIA AS ABAS
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
-# 📊 ABA 1 FINAL - BLOCOS POR UF + IBGE LIMPO
+# 📊 ABA 1 FINAL - IBGE CORRETO + BLOCOS POR UF
 # ================================
 with aba1:
 
@@ -15,32 +15,35 @@ with aba1:
     st.subheader("🚀 Prospecção Inteligente por Estado")
 
     # ================================
-    # 🧠 MAPA UF (NOME → SIGLA)
+    # 🧠 IBGE → UF
     # ================================
-    mapa_uf = {
-        "ACRE":"AC","ALAGOAS":"AL","AMAPÁ":"AP","AMAZONAS":"AM",
-        "BAHIA":"BA","CEARÁ":"CE","DISTRITO FEDERAL":"DF","ESPÍRITO SANTO":"ES",
-        "GOIÁS":"GO","MARANHÃO":"MA","MATO GROSSO":"MT","MATO GROSSO DO SUL":"MS",
-        "MINAS GERAIS":"MG","PARÁ":"PA","PARAÍBA":"PB","PARANÁ":"PR",
-        "PERNAMBUCO":"PE","PIAUÍ":"PI","RIO DE JANEIRO":"RJ",
-        "RIO GRANDE DO NORTE":"RN","RIO GRANDE DO SUL":"RS",
-        "RONDÔNIA":"RO","RORAIMA":"RR","SANTA CATARINA":"SC",
-        "SÃO PAULO":"SP","SERGIPE":"SE","TOCANTINS":"TO"
-    }
+    def extrair_uf_ibge(valor):
+        try:
+            codigo = str(valor).split("-")[0][:2]
 
-    def normalizar_uf(valor):
-        valor = str(valor).strip().upper()
+            mapa = {
+                "11":"RO","12":"AC","13":"AM","14":"RR","15":"PA","16":"AP","17":"TO",
+                "21":"MA","22":"PI","23":"CE","24":"RN","25":"PB","26":"PE","27":"AL","28":"SE","29":"BA",
+                "31":"MG","32":"ES","33":"RJ","35":"SP",
+                "41":"PR","42":"SC","43":"RS",
+                "50":"MS","51":"MT","52":"GO","53":"DF"
+            }
 
-        if len(valor) == 2:
-            return valor
-
-        if valor in mapa_uf:
-            return mapa_uf[valor]
-
-        return ""
+            return mapa.get(codigo, "")
+        except:
+            return ""
 
     # ================================
-    # 🔄 API
+    # 🏙️ EXTRAIR CIDADE
+    # ================================
+    def extrair_cidade(valor):
+        try:
+            return str(valor).split("-")[1].strip().upper()
+        except:
+            return ""
+
+    # ================================
+    # 🔄 API RECEITA
     # ================================
     @st.cache_data(ttl=86400)
     def consultar_cnpj(cnpj):
@@ -53,7 +56,6 @@ with aba1:
         for url in apis:
             try:
                 r = requests.get(url, timeout=5)
-
                 if r.status_code == 200:
                     data = r.json()
 
@@ -61,7 +63,6 @@ with aba1:
                         "razao_social": data.get("razao_social") or data.get("nome") or "",
                         "nome_fantasia": data.get("nome_fantasia") or data.get("fantasia") or "",
                         "municipio": data.get("municipio") or data.get("cidade") or "",
-                        "uf": data.get("uf") or "",
                         "cnae": data.get("cnae_fiscal_descricao") or data.get("atividade_principal", [{}])[0].get("text", "")
                     }
             except:
@@ -99,13 +100,21 @@ with aba1:
         )
 
         # ================================
-        # 📍 IBGE
+        # 📍 MUNICÍPIO (IBGE)
         # ================================
-        col_cidade = [c for c in df.columns if "MUNIC" in c.upper() or "CIDADE" in c.upper()]
-        col_uf = [c for c in df.columns if "UF" in c.upper()]
+        col_municipio = [c for c in df.columns if "MUNIC" in c.upper()]
 
-        df["cidade_ibge"] = df[col_cidade[0]].astype(str).str.upper() if col_cidade else ""
-        df["uf_ibge"] = df[col_uf[0]].apply(normalizar_uf) if col_uf else ""
+        if not col_municipio:
+            st.error("❌ Coluna de município não encontrada")
+            st.stop()
+
+        col_municipio = col_municipio[0]
+
+        df["cidade_ibge"] = df[col_municipio].apply(extrair_cidade)
+        df["uf_ibge"] = df[col_municipio].apply(extrair_uf_ibge)
+
+        # remover inválidos
+        df = df[df["uf_ibge"] != ""]
 
         # ================================
         # 📊 AGRUPAR
@@ -116,9 +125,6 @@ with aba1:
         }).reset_index()
 
         agrupado["Afastamentos"] = df.groupby(col_cnpj).size().values
-
-        # remover lixo
-        agrupado = agrupado[agrupado["uf_ibge"] != ""]
 
         st.success(f"✅ {len(agrupado)} empresas válidas")
 
@@ -175,7 +181,7 @@ with aba1:
                         use_container_width=True
                     )
 
-                    time.sleep(0.05)
+                    time.sleep(0.03)
 
                 final = pd.DataFrame(resultados)
 
