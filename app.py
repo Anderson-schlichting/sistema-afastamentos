@@ -15,6 +15,8 @@ with aba1:
 
 st.subheader("🚀 Prospecção Inteligente")
 
+st.subheader("🚀 Prospecção Inteligente")
+
 # ================================
 # 🧠 IBGE → UF
 # ================================
