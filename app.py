@@ -1,34 +1,57 @@
-import streamlit as st
-
-# 🔹 1. CRIA AS ABAS
-aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
-# ================================
-# 📊 ABA 1 - FINAL COM ESTADOS + AVULSOS
-# ================================
 with aba1:
 
     import pandas as pd
     import requests
     import time
     import streamlit as st
+    import re
+    import pdfplumber
+    from concurrent.futures import ThreadPoolExecutor
 
-    st.subheader("🚀 Prospecção Inteligente")
+    st.subheader("🚀 Prospecção Inteligente + FAP")
 
     # ================================
-    # 🧠 IBGE → UF
+    # 📂 BASE EDITAIS (CACHE)
+    # ================================
+    @st.cache_data(show_spinner="Carregando base de editais...")
+    def carregar_editais():
+
+        arquivos = [
+            "editais/2021.pdf",
+            "editais/2022.pdf",
+            "editais/2023.pdf",
+            "editais/2024.pdf"
+        ]
+
+        cnpjs = set()
+
+        for arq in arquivos:
+            try:
+                with pdfplumber.open(arq) as pdf:
+                    for p in pdf.pages:
+                        txt = p.extract_text()
+                        if txt:
+                            encontrados = re.findall(r"\d{14}", txt)
+                            cnpjs.update(encontrados)
+            except:
+                pass
+
+        return cnpjs
+
+    base_editais = carregar_editais()
+
+    st.success(f"📊 {len(base_editais)} empresas com recurso FAP identificadas")
+
+    # ================================
+    # 🧠 FUNÇÕES
     # ================================
     def extrair_uf_ibge(valor):
         try:
             codigo = str(valor).split("-")[0][:2]
-
             mapa = {
-                "11":"RO","12":"AC","13":"AM","14":"RR","15":"PA","16":"AP","17":"TO",
-                "21":"MA","22":"PI","23":"CE","24":"RN","25":"PB","26":"PE","27":"AL","28":"SE","29":"BA",
-                "31":"MG","32":"ES","33":"RJ","35":"SP",
                 "41":"PR","42":"SC","43":"RS",
-                "50":"MS","51":"MT","52":"GO","53":"DF"
+                "35":"SP","33":"RJ","31":"MG"
             }
-
             return mapa.get(codigo, "")
         except:
             return ""
@@ -39,39 +62,9 @@ with aba1:
         except:
             return ""
 
-    # ================================
-    # 🔄 API
-    # ================================
-    def consultar_cnpj(cnpj):
+    def is_b91(valor):
+        return "B91" in str(valor).upper()
 
-        urls = [
-            f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}",
-            f"https://receitaws.com.br/v1/cnpj/{cnpj}",
-            f"https://api.cnpj.ws/cnpj/{cnpj}"
-        ]
-
-        for url in urls:
-            try:
-                r = requests.get(url, timeout=10)
-                if r.status_code == 200:
-                    data = r.json()
-
-                    return {
-                        "razao_social": data.get("razao_social") or data.get("nome") or "",
-                        "nome_fantasia": data.get("nome_fantasia") or data.get("fantasia") or "",
-                        "municipio": data.get("municipio") or "",
-                        "uf": data.get("uf") or "",
-                        "cnae": data.get("cnae_fiscal_descricao") or "",
-                        "telefone": data.get("ddd_telefone_1") or data.get("telefone") or ""
-                    }
-            except:
-                continue
-
-        return {}
-
-    # ================================
-    # 💰 POTENCIAL
-    # ================================
     def potencial(af):
         if af >= 50: return "🔥 ALTA"
         elif af >= 20: return "🟠 BOA"
@@ -105,36 +98,60 @@ with aba1:
         col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
         df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r"\D","",regex=True).str.zfill(14)
-        df = df.drop_duplicates(subset=[col_cnpj])
 
         # ================================
-        # 📍 DETECTA MUNICÍPIO
+        # 🧠 DETECTA B91
+        # ================================
+        col_beneficio = None
+        for c in df.columns:
+            if "BENEF" in c.upper() or "ESPÉCIE" in c.upper():
+                col_beneficio = c
+                break
+
+        if col_beneficio:
+            df["B91"] = df[col_beneficio].apply(is_b91)
+        else:
+            df["B91"] = False
+
+        # ================================
+        # 📍 MUNICÍPIO
         # ================================
         col_municipio = [c for c in df.columns if "MUNIC" in c.upper()]
 
         if col_municipio:
             col_municipio = col_municipio[0]
-
             df["cidade"] = df[col_municipio].apply(extrair_cidade)
             df["uf"] = df[col_municipio].apply(extrair_uf_ibge)
         else:
             df["cidade"] = ""
             df["uf"] = ""
 
-        df["Afastamentos"] = 1
+        # ================================
+        # 🔥 AGRUPAMENTO REAL
+        # ================================
+        agrupado = df.groupby(col_cnpj).agg(
+            AFASTAMENTOS=("CNPJ", "count"),
+            B91=("B91", "sum"),
+            cidade=("cidade", "first"),
+            uf=("uf", "first")
+        ).reset_index()
+
+        agrupado["TEVE_ACIDENTE"] = agrupado["B91"].apply(lambda x: "SIM" if x > 0 else "NÃO")
+        agrupado["RECURSO_FAP"] = agrupado[col_cnpj].apply(lambda x: "SIM" if x in base_editais else "NÃO")
+        agrupado["POTENCIAL"] = agrupado["AFASTAMENTOS"].apply(potencial)
 
         # ================================
-        # 📂 ORGANIZA GRUPOS
+        # 📂 GRUPOS
         # ================================
-        df["grupo"] = df["uf"].apply(lambda x: x if x else "AVULSOS")
+        agrupado["grupo"] = agrupado["uf"].apply(lambda x: x if x else "AVULSOS")
 
-        grupos = df["grupo"].unique()
+        grupos = agrupado["grupo"].unique()
 
         st.markdown("## 📂 Grupos encontrados")
 
         for g in grupos:
 
-            df_g = df[df["grupo"] == g]
+            df_g = agrupado[agrupado["grupo"] == g]
 
             st.markdown(f"### 📍 {g} ({len(df_g)} empresas)")
 
@@ -145,44 +162,35 @@ with aba1:
                 tabela = st.empty()
 
                 total = len(df_g)
-                lote = 10
 
-                for i in range(0, total, lote):
+                for i, (_, row) in enumerate(df_g.iterrows()):
 
-                    bloco = df_g.iloc[i:i+lote]
+                    cnpj = row[col_cnpj]
 
-                    for _, row in bloco.iterrows():
+                    dados = consultar_cnpj(cnpj)
 
-                        cnpj = row[col_cnpj]
+                    linha = {
+                        "Empresa": dados.get("razao_social",""),
+                        "Fantasia": dados.get("nome_fantasia",""),
+                        "CNPJ": cnpj,
+                        "Município": dados.get("municipio") or row["cidade"],
+                        "UF": dados.get("uf") or row["uf"],
+                        "Telefone": dados.get("telefone",""),
+                        "WhatsApp": gerar_whatsapp(dados.get("telefone")),
+                        "CNAE": dados.get("cnae",""),
+                        "Afastamentos": row["AFASTAMENTOS"],
+                        "B91": row["B91"],
+                        "Acidente": row["TEVE_ACIDENTE"],
+                        "Recorreu FAP": row["RECURSO_FAP"],
+                        "Potencial": row["POTENCIAL"]
+                    }
 
-                        dados = {}
-                        for tentativa in range(3):
-                            dados = consultar_cnpj(cnpj)
-                            if dados.get("razao_social"):
-                                break
-                            time.sleep(1)
+                    resultados.append(linha)
 
-                        linha = {
-                            "Empresa": dados.get("razao_social","NÃO ENCONTRADO"),
-                            "Fantasia": dados.get("nome_fantasia",""),
-                            "CNPJ": cnpj,
-                            "Município": dados.get("municipio") or row["cidade"],
-                            "UF": dados.get("uf") or row["uf"],
-                            "Telefone": dados.get("telefone",""),
-                            "WhatsApp": gerar_whatsapp(dados.get("telefone")),
-                            "CNAE": dados.get("cnae",""),
-                            "Afastamentos": row["Afastamentos"],
-                            "Potencial": potencial(row["Afastamentos"])
-                        }
-
-                        resultados.append(linha)
-
-                        time.sleep(0.4)
-
-                    progress.progress(min((i+lote)/total,1.0))
+                    progress.progress((i+1)/total)
                     tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
 
-                    time.sleep(1.5)
+                    time.sleep(0.3)
 
                 final = pd.DataFrame(resultados)
 
