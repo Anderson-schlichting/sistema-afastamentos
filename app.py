@@ -3,7 +3,7 @@ import streamlit as st
 # 🔹 1. CRIA AS ABAS
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
-# 📊 ABA 1 - FINAL COM BOTÃO WHATSAPP
+# 📊 ABA 1 - FINAL COMPLETA (TEMPO REAL + WHATSAPP)
 # ================================
 with aba1:
 
@@ -110,14 +110,10 @@ with aba1:
         df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r"\D","",regex=True).str.zfill(14)
         df = df.drop_duplicates(subset=[col_cnpj])
 
-        # ================================
-        # 📍 MUNICÍPIO
-        # ================================
         col_municipio = [c for c in df.columns if "MUNIC" in c.upper()]
 
         if col_municipio:
             col_municipio = col_municipio[0]
-
             df["cidade"] = df[col_municipio].apply(extrair_cidade)
             df["uf"] = df[col_municipio].apply(extrair_uf_ibge)
         else:
@@ -126,14 +122,9 @@ with aba1:
 
         df["Afastamentos"] = 1
 
-        # ================================
-        # 📂 GRUPOS
-        # ================================
         df["grupo"] = df["uf"].apply(lambda x: x if x else "AVULSOS")
 
         grupos = df["grupo"].unique()
-
-        st.markdown("## 📂 Grupos encontrados")
 
         for g in grupos:
 
@@ -144,7 +135,10 @@ with aba1:
             if st.button(f"🚀 Processar {g}"):
 
                 resultados = []
+
                 progress = st.progress(0)
+                status = st.empty()
+                tabela = st.empty()
 
                 total = len(df_g)
                 lote = 10
@@ -181,32 +175,32 @@ with aba1:
 
                         resultados.append(linha)
 
+                        # 🔥 ATUALIZA EM TEMPO REAL
+                        df_parcial = pd.DataFrame(resultados)
+
+                        tabela.data_editor(
+                            df_parcial.sort_values("Afastamentos", ascending=False),
+                            use_container_width=True,
+                            column_config={
+                                "WhatsApp": st.column_config.LinkColumn(
+                                    "WhatsApp",
+                                    display_text="💬 Abrir"
+                                )
+                            }
+                        )
+
+                        progresso = min(len(resultados) / total, 1.0)
+                        progress.progress(progresso)
+                        status.write(f"{g} → {int(progresso*100)}%")
+
                         time.sleep(0.4)
 
-                    progress.progress(min((i+lote)/total,1.0))
                     time.sleep(1.5)
 
                 final = pd.DataFrame(resultados)
 
                 st.success(f"{len(final)} empresas processadas")
 
-                # ================================
-                # 📲 TABELA COM BOTÃO
-                # ================================
-                st.data_editor(
-                    final,
-                    use_container_width=True,
-                    column_config={
-                        "WhatsApp": st.column_config.LinkColumn(
-                            "WhatsApp",
-                            display_text="💬 Abrir"
-                        )
-                    }
-                )
-
-                # ================================
-                # 📤 EXPORTAR
-                # ================================
                 csv = final.to_csv(index=False).encode('utf-8')
                 st.download_button("📤 Baixar Leads", csv, f"leads_{g}.csv")
 # ================================
