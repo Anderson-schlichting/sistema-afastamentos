@@ -45,15 +45,52 @@ with aba1:
     st.success(f"📊 {len(base_editais)} empresas com recurso FAP identificadas")
 
     # ================================
+    # 🌐 API CNPJ (3 fontes)
+    # ================================
+    @st.cache_data(ttl=86400)
+    def consultar_cnpj(cnpj):
+
+        urls = [
+            f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}",
+            f"https://receitaws.com.br/v1/cnpj/{cnpj}",
+            f"https://api.cnpj.ws/cnpj/{cnpj}"
+        ]
+
+        for url in urls:
+            try:
+                r = requests.get(url, timeout=5)
+
+                if r.status_code == 200:
+                    data = r.json()
+
+                    return {
+                        "razao_social": data.get("razao_social") or data.get("nome") or "",
+                        "nome_fantasia": data.get("nome_fantasia") or data.get("fantasia") or "",
+                        "municipio": data.get("municipio") or "",
+                        "uf": data.get("uf") or "",
+                        "cnae": data.get("cnae_fiscal_descricao") or "",
+                        "telefone": data.get("ddd_telefone_1") or data.get("telefone") or ""
+                    }
+            except:
+                continue
+
+        return {}
+
+    # ================================
     # 🧠 FUNÇÕES
     # ================================
     def extrair_uf_ibge(valor):
         try:
             codigo = str(valor).split("-")[0][:2]
+
             mapa = {
+                "11":"RO","12":"AC","13":"AM","14":"RR","15":"PA","16":"AP","17":"TO",
+                "21":"MA","22":"PI","23":"CE","24":"RN","25":"PB","26":"PE","27":"AL","28":"SE","29":"BA",
+                "31":"MG","32":"ES","33":"RJ","35":"SP",
                 "41":"PR","42":"SC","43":"RS",
-                "35":"SP","33":"RJ","31":"MG"
+                "50":"MS","51":"MT","52":"GO","53":"DF"
             }
+
             return mapa.get(codigo, "")
         except:
             return ""
@@ -97,12 +134,21 @@ with aba1:
         df = pd.concat(dfs, ignore_index=True)
         df.columns = df.columns.astype(str)
 
-        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
+        # ================================
+        # 🔍 IDENTIFICA CNPJ (SEGURO)
+        # ================================
+        col_cnpj_list = [c for c in df.columns if "CNPJ" in c.upper()]
+
+        if not col_cnpj_list:
+            st.error("❌ Coluna CNPJ não encontrada")
+            st.stop()
+
+        col_cnpj = col_cnpj_list[0]
 
         df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r"\D","",regex=True).str.zfill(14)
 
         # ================================
-        # 🧠 DETECTA B91
+        # 🧠 B91
         # ================================
         col_beneficio = None
         for c in df.columns:
@@ -110,10 +156,7 @@ with aba1:
                 col_beneficio = c
                 break
 
-        if col_beneficio:
-            df["B91"] = df[col_beneficio].apply(is_b91)
-        else:
-            df["B91"] = False
+        df["B91"] = df[col_beneficio].apply(is_b91) if col_beneficio else False
 
         # ================================
         # 📍 MUNICÍPIO
@@ -171,6 +214,11 @@ with aba1:
 
                     dados = consultar_cnpj(cnpj)
 
+                    percent = int((i + 1) / total * 100)
+
+                    st.write(f"Processando: {percent}%")
+                    progress.progress((i + 1) / total)
+
                     linha = {
                         "Empresa": dados.get("razao_social",""),
                         "Fantasia": dados.get("nome_fantasia",""),
@@ -189,7 +237,6 @@ with aba1:
 
                     resultados.append(linha)
 
-                    progress.progress((i + 1) / total)
                     tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
 
                     time.sleep(0.3)
