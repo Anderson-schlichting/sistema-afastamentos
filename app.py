@@ -10,6 +10,8 @@ aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 
 with aba1:
 
+    import os
+
     st.subheader("🚀 Prospecção Inteligente + FAP")
 
     # ================================
@@ -18,20 +20,17 @@ with aba1:
     @st.cache_data(show_spinner="Carregando base de editais...")
     def carregar_editais():
 
-      import os
-
-pasta = "editoriais"
-
-arquivos = []
-
-if os.path.exists(pasta):
-    for f in os.listdir(pasta):
-        if f.endswith(".pdf"):
-            arquivos.append(os.path.join(pasta, f))
-else:
-    st.error(f"❌ Pasta '{pasta}' não encontrada")
-
+        pasta = "editoriais"
+        arquivos = []
         cnpjs = set()
+
+        if os.path.exists(pasta):
+            for f in os.listdir(pasta):
+                if f.endswith(".pdf"):
+                    arquivos.append(os.path.join(pasta, f))
+        else:
+            st.error(f"❌ Pasta '{pasta}' não encontrada")
+            return set()
 
         for arq in arquivos:
             try:
@@ -39,7 +38,7 @@ else:
 
                     for p in pdf.pages:
 
-                        # 🔥 1. TENTAR EXTRAIR TABELAS (PRINCIPAL)
+                        # 🔥 1. TABELAS (principal)
                         tabelas = p.extract_tables()
 
                         if tabelas:
@@ -50,7 +49,7 @@ else:
                                             encontrados = re.findall(r"\d{14}", str(celula))
                                             cnpjs.update(encontrados)
 
-                        # 🔥 2. FALLBACK TEXTO
+                        # 🔥 2. TEXTO (fallback)
                         txt = p.extract_text()
 
                         if txt:
@@ -59,7 +58,7 @@ else:
                             cnpjs.update(encontrados)
 
             except Exception as e:
-                st.warning(f"Erro ao ler {arq}")
+                st.error(f"Erro ao ler {arq}: {e}")
 
         return cnpjs
 
@@ -68,7 +67,7 @@ else:
     st.success(f"📊 {len(base_editais)} empresas com recurso FAP identificadas")
 
     # ================================
-    # 🌐 API CNPJ (3 fontes)
+    # 🌐 API CNPJ
     # ================================
     @st.cache_data(ttl=86400)
     def consultar_cnpj(cnpj):
@@ -157,9 +156,6 @@ else:
         df = pd.concat(dfs, ignore_index=True)
         df.columns = df.columns.astype(str)
 
-        # ================================
-        # 🔍 CNPJ
-        # ================================
         col_cnpj_list = [c for c in df.columns if "CNPJ" in c.upper()]
 
         if not col_cnpj_list:
@@ -170,9 +166,6 @@ else:
 
         df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r"\D","",regex=True).str.zfill(14)
 
-        # ================================
-        # 🧠 B91
-        # ================================
         col_beneficio = None
         for c in df.columns:
             if "BENEF" in c.upper() or "ESPÉCIE" in c.upper():
@@ -181,9 +174,6 @@ else:
 
         df["B91"] = df[col_beneficio].apply(is_b91) if col_beneficio else False
 
-        # ================================
-        # 📍 MUNICÍPIO
-        # ================================
         col_municipio = [c for c in df.columns if "MUNIC" in c.upper()]
 
         if col_municipio:
@@ -194,9 +184,6 @@ else:
             df["cidade"] = ""
             df["uf"] = ""
 
-        # ================================
-        # 🔥 AGRUPAMENTO
-        # ================================
         agrupado = df.groupby(col_cnpj).agg(
             AFASTAMENTOS=(col_cnpj, "count"),
             B91=("B91", "sum"),
@@ -208,9 +195,6 @@ else:
         agrupado["RECURSO_FAP"] = agrupado[col_cnpj].apply(lambda x: "SIM" if x in base_editais else "NÃO")
         agrupado["POTENCIAL"] = agrupado["AFASTAMENTOS"].apply(potencial)
 
-        # ================================
-        # 📂 GRUPOS
-        # ================================
         agrupado["grupo"] = agrupado["uf"].apply(lambda x: x if x else "AVULSOS")
 
         grupos = agrupado["grupo"].unique()
