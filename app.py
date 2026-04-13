@@ -3,193 +3,205 @@ import streamlit as st
 # 🔹 1. CRIA AS ABAS
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
-# 📊 ABA 1 - FINAL COM ESTADOS + AVULSOS
+
+# 📊 ABA 1 - FINAL COM AGRUPAMENTO POR CNPJ
+
 # ================================
+
 with aba1:
 
-    import pandas as pd
-    import requests
-    import time
-    import streamlit as st
+```
+import pandas as pd
+import requests
+import time
+import streamlit as st
 
-    st.subheader("🚀 Prospecção Inteligente")
+st.subheader("🚀 Prospecção Inteligente")
 
-    # ================================
-    # 🧠 IBGE → UF
-    # ================================
-    def extrair_uf_ibge(valor):
+# ================================
+# 🧠 IBGE → UF
+# ================================
+def extrair_uf_ibge(valor):
+    try:
+        codigo = str(valor).split("-")[0][:2]
+
+        mapa = {
+            "11":"RO","12":"AC","13":"AM","14":"RR","15":"PA","16":"AP","17":"TO",
+            "21":"MA","22":"PI","23":"CE","24":"RN","25":"PB","26":"PE","27":"AL","28":"SE","29":"BA",
+            "31":"MG","32":"ES","33":"RJ","35":"SP",
+            "41":"PR","42":"SC","43":"RS",
+            "50":"MS","51":"MT","52":"GO","53":"DF"
+        }
+
+        return mapa.get(codigo, "")
+    except:
+        return ""
+
+def extrair_cidade(valor):
+    try:
+        return str(valor).split("-")[1].strip().upper()
+    except:
+        return ""
+
+# ================================
+# 🔄 API
+# ================================
+def consultar_cnpj(cnpj):
+
+    urls = [
+        f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}",
+        f"https://receitaws.com.br/v1/cnpj/{cnpj}",
+        f"https://api.cnpj.ws/cnpj/{cnpj}"
+    ]
+
+    for url in urls:
         try:
-            codigo = str(valor).split("-")[0][:2]
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                data = r.json()
 
-            mapa = {
-                "11":"RO","12":"AC","13":"AM","14":"RR","15":"PA","16":"AP","17":"TO",
-                "21":"MA","22":"PI","23":"CE","24":"RN","25":"PB","26":"PE","27":"AL","28":"SE","29":"BA",
-                "31":"MG","32":"ES","33":"RJ","35":"SP",
-                "41":"PR","42":"SC","43":"RS",
-                "50":"MS","51":"MT","52":"GO","53":"DF"
-            }
-
-            return mapa.get(codigo, "")
+                return {
+                    "razao_social": data.get("razao_social") or data.get("nome") or "",
+                    "nome_fantasia": data.get("nome_fantasia") or data.get("fantasia") or "",
+                    "municipio": data.get("municipio") or "",
+                    "uf": data.get("uf") or "",
+                    "cnae": data.get("cnae_fiscal_descricao") or "",
+                    "telefone": data.get("ddd_telefone_1") or data.get("telefone") or ""
+                }
         except:
-            return ""
+            continue
 
-    def extrair_cidade(valor):
-        try:
-            return str(valor).split("-")[1].strip().upper()
-        except:
-            return ""
+    return {}
 
-    # ================================
-    # 🔄 API
-    # ================================
-    def consultar_cnpj(cnpj):
+# ================================
+# 💰 POTENCIAL
+# ================================
+def potencial(af):
+    if af >= 50: return "🔥 ALTA"
+    elif af >= 20: return "🟠 BOA"
+    elif af >= 10: return "🟡 MÉDIA"
+    return "🟢 BAIXA"
 
-        urls = [
-            f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}",
-            f"https://receitaws.com.br/v1/cnpj/{cnpj}",
-            f"https://api.cnpj.ws/cnpj/{cnpj}"
-        ]
+def gerar_whatsapp(t):
+    t = ''.join(filter(str.isdigit, str(t)))
+    return f"https://wa.me/55{t}" if t else ""
 
-        for url in urls:
-            try:
-                r = requests.get(url, timeout=10)
-                if r.status_code == 200:
-                    data = r.json()
+# ================================
+# 📥 UPLOAD
+# ================================
+files = st.file_uploader("Envie até 5 planilhas", accept_multiple_files=True)
 
-                    return {
-                        "razao_social": data.get("razao_social") or data.get("nome") or "",
-                        "nome_fantasia": data.get("nome_fantasia") or data.get("fantasia") or "",
-                        "municipio": data.get("municipio") or "",
-                        "uf": data.get("uf") or "",
-                        "cnae": data.get("cnae_fiscal_descricao") or "",
-                        "telefone": data.get("ddd_telefone_1") or data.get("telefone") or ""
-                    }
-            except:
-                continue
+if files:
 
-        return {}
+    dfs = []
 
-    # ================================
-    # 💰 POTENCIAL
-    # ================================
-    def potencial(af):
-        if af >= 50: return "🔥 ALTA"
-        elif af >= 20: return "🟠 BOA"
-        elif af >= 10: return "🟡 MÉDIA"
-        return "🟢 BAIXA"
-
-    def gerar_whatsapp(t):
-        t = ''.join(filter(str.isdigit, str(t)))
-        return f"https://wa.me/55{t}" if t else ""
-
-    # ================================
-    # 📥 UPLOAD
-    # ================================
-    files = st.file_uploader("Envie até 5 planilhas", accept_multiple_files=True)
-
-    if files:
-
-        dfs = []
-
-        for file in files:
-            if file.name.endswith(".csv"):
-                df_temp = pd.read_csv(file, sep=';', encoding='latin1')
-            else:
-                df_temp = pd.read_excel(file)
-
-            dfs.append(df_temp)
-
-        df = pd.concat(dfs, ignore_index=True)
-        df.columns = df.columns.astype(str)
-
-        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
-
-        df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r"\D","",regex=True).str.zfill(14)
-        df = df.drop_duplicates(subset=[col_cnpj])
-
-        # ================================
-        # 📍 DETECTA MUNICÍPIO
-        # ================================
-        col_municipio = [c for c in df.columns if "MUNIC" in c.upper()]
-
-        if col_municipio:
-            col_municipio = col_municipio[0]
-
-            df["cidade"] = df[col_municipio].apply(extrair_cidade)
-            df["uf"] = df[col_municipio].apply(extrair_uf_ibge)
+    for file in files:
+        if file.name.endswith(".csv"):
+            df_temp = pd.read_csv(file, sep=';', encoding='latin1')
         else:
-            df["cidade"] = ""
-            df["uf"] = ""
+            df_temp = pd.read_excel(file)
 
-        df["Afastamentos"] = 1
+        dfs.append(df_temp)
 
-        # ================================
-        # 📂 ORGANIZA GRUPOS
-        # ================================
-        df["grupo"] = df["uf"].apply(lambda x: x if x else "AVULSOS")
+    df = pd.concat(dfs, ignore_index=True)
+    df.columns = df.columns.astype(str)
 
-        grupos = df["grupo"].unique()
+    col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
-        st.markdown("## 📂 Grupos encontrados")
+    df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r"\D","",regex=True).str.zfill(14)
 
-        for g in grupos:
+    # ================================
+    # 📍 MUNICÍPIO / UF
+    # ================================
+    col_municipio = [c for c in df.columns if "MUNIC" in c.upper()]
 
-            df_g = df[df["grupo"] == g]
+    if col_municipio:
+        col_municipio = col_municipio[0]
+        df["cidade"] = df[col_municipio].apply(extrair_cidade)
+        df["uf"] = df[col_municipio].apply(extrair_uf_ibge)
+    else:
+        df["cidade"] = ""
+        df["uf"] = ""
 
-            st.markdown(f"### 📍 {g} ({len(df_g)} empresas)")
+    # ================================
+    # 🔥 AGRUPAMENTO REAL POR CNPJ
+    # ================================
+    df["Afastamentos"] = 1
 
-            if st.button(f"🚀 Processar {g}"):
+    df = df.groupby(col_cnpj).agg({
+        "cidade": "first",
+        "uf": "first",
+        "Afastamentos": "sum"
+    }).reset_index()
 
-                resultados = []
-                progress = st.progress(0)
-                tabela = st.empty()
+    # ================================
+    # 📂 GRUPOS
+    # ================================
+    df["grupo"] = df["uf"].apply(lambda x: x if x else "AVULSOS")
 
-                total = len(df_g)
-                lote = 10
+    grupos = df["grupo"].unique()
 
-                for i in range(0, total, lote):
+    st.markdown("## 📂 Grupos encontrados")
 
-                    bloco = df_g.iloc[i:i+lote]
+    for g in grupos:
 
-                    for _, row in bloco.iterrows():
+        df_g = df[df["grupo"] == g]
 
-                        cnpj = row[col_cnpj]
+        st.markdown(f"### 📍 {g} ({len(df_g)} empresas)")
 
-                        dados = {}
-                        for tentativa in range(3):
-                            dados = consultar_cnpj(cnpj)
-                            if dados.get("razao_social"):
-                                break
-                            time.sleep(1)
+        if st.button(f"🚀 Processar {g}"):
 
-                        linha = {
-                            "Empresa": dados.get("razao_social","NÃO ENCONTRADO"),
-                            "Fantasia": dados.get("nome_fantasia",""),
-                            "CNPJ": cnpj,
-                            "Município": dados.get("municipio") or row["cidade"],
-                            "UF": dados.get("uf") or row["uf"],
-                            "Telefone": dados.get("telefone",""),
-                            "WhatsApp": gerar_whatsapp(dados.get("telefone")),
-                            "CNAE": dados.get("cnae",""),
-                            "Afastamentos": row["Afastamentos"],
-                            "Potencial": potencial(row["Afastamentos"])
-                        }
+            resultados = []
+            progress = st.progress(0)
+            tabela = st.empty()
 
-                        resultados.append(linha)
+            total = len(df_g)
+            lote = 10
 
-                        time.sleep(0.4)
+            for i in range(0, total, lote):
 
-                    progress.progress(min((i+lote)/total,1.0))
-                    tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
+                bloco = df_g.iloc[i:i+lote]
 
-                    time.sleep(1.5)
+                for _, row in bloco.iterrows():
 
-                final = pd.DataFrame(resultados)
+                    cnpj = row[col_cnpj]
 
-                st.success(f"{len(final)} empresas processadas")
+                    dados = {}
+                    for tentativa in range(3):
+                        dados = consultar_cnpj(cnpj)
+                        if dados.get("razao_social"):
+                            break
+                        time.sleep(1)
 
-                csv = final.to_csv(index=False).encode('utf-8')
-                st.download_button("📤 Baixar Leads", csv, f"leads_{g}.csv")
+                    linha = {
+                        "Empresa": dados.get("razao_social","NÃO ENCONTRADO"),
+                        "Fantasia": dados.get("nome_fantasia",""),
+                        "CNPJ": cnpj,
+                        "Município": dados.get("municipio") or row["cidade"],
+                        "UF": dados.get("uf") or row["uf"],
+                        "Telefone": dados.get("telefone",""),
+                        "WhatsApp": gerar_whatsapp(dados.get("telefone")),
+                        "CNAE": dados.get("cnae",""),
+                        "Afastamentos": row["Afastamentos"],
+                        "Potencial": potencial(row["Afastamentos"])
+                    }
+
+                    resultados.append(linha)
+
+                    time.sleep(0.4)
+
+                progress.progress(min((i+lote)/total,1.0))
+                tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
+
+                time.sleep(1.5)
+
+            final = pd.DataFrame(resultados)
+
+            st.success(f"{len(final)} empresas processadas")
+
+            csv = final.to_csv(index=False).encode('utf-8')
+            st.download_button("📤 Baixar Leads", csv, f"leads_{g}.csv")
+```
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
