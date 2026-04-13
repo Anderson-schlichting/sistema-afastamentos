@@ -135,7 +135,7 @@ with aba1:
         df.columns = df.columns.astype(str)
 
         # ================================
-        # 🔍 IDENTIFICA CNPJ (SEGURO)
+        # 🔍 IDENTIFICA CNPJ
         # ================================
         col_cnpj_list = [c for c in df.columns if "CNPJ" in c.upper()]
 
@@ -172,7 +172,7 @@ with aba1:
             df["uf"] = ""
 
         # ================================
-        # 🔥 AGRUPAMENTO REAL
+        # 🔥 AGRUPAMENTO
         # ================================
         agrupado = df.groupby(col_cnpj).agg(
             AFASTAMENTOS=(col_cnpj, "count"),
@@ -186,7 +186,7 @@ with aba1:
         agrupado["POTENCIAL"] = agrupado["AFASTAMENTOS"].apply(potencial)
 
         # ================================
-        # 📂 GRUPOS
+        # 📂 GRUPOS (AQUI FICA O LOOP DO g)
         # ================================
         agrupado["grupo"] = agrupado["uf"].apply(lambda x: x if x else "AVULSOS")
 
@@ -194,71 +194,68 @@ with aba1:
 
         st.markdown("## 📂 Grupos encontrados")
 
-for g in grupos:
+        for g in grupos:
 
-    df_g = agrupado[agrupado["grupo"] == g]
+            df_g = agrupado[agrupado["grupo"] == g]
 
-    st.markdown(f"### 📍 {g} ({len(df_g)} empresas)")
+            st.markdown(f"### 📍 {g} ({len(df_g)} empresas)")
 
-    if st.button(f"🚀 Processar {g}", key=f"btn_{g}"):
+            # 🔥 BOTÃO AGORA CORRETO (DENTRO DO LOOP)
+            if st.button(f"🚀 Processar {g}", key=f"btn_{g}"):
 
-    resultados = []
+                resultados = []
 
-    # 🔥 elementos fixos (não duplicam na tela)
-    status_text = st.empty()
-    progress_bar = st.progress(0)
-    tabela = st.empty()
+                status_text = st.empty()
+                progress_bar = st.progress(0)
+                tabela = st.empty()
 
-    total = len(df_g)
+                total = len(df_g)
 
-    for i, (_, row) in enumerate(df_g.iterrows()):
+                for i, (_, row) in enumerate(df_g.iterrows()):
 
-        cnpj = row[col_cnpj]
+                    cnpj = row[col_cnpj]
 
-        dados = consultar_cnpj(cnpj)
+                    dados = consultar_cnpj(cnpj)
 
-        # 📊 cálculo percentual
-        percent = int((i + 1) / total * 100)
+                    percent = int((i + 1) / total * 100)
 
-        # 🔥 atualização limpa (SEM criar várias linhas)
-        status_text.text(f"Processando: {percent}% ({i+1}/{total})")
-        progress_bar.progress((i + 1) / total)
+                    status_text.text(f"Processando: {percent}% ({i+1}/{total})")
+                    progress_bar.progress((i + 1) / total)
 
-        linha = {
-            "Empresa": dados.get("razao_social",""),
-            "Fantasia": dados.get("nome_fantasia",""),
-            "CNPJ": cnpj,
-            "Município": dados.get("municipio") or row["cidade"],
-            "UF": dados.get("uf") or row["uf"],
-            "Telefone": dados.get("telefone",""),
-            "WhatsApp": gerar_whatsapp(dados.get("telefone")),
-            "CNAE": dados.get("cnae",""),
-            "Afastamentos": row["AFASTAMENTOS"],
-            "B91": row["B91"],
-            "Acidente": row["TEVE_ACIDENTE"],
-            "Recorreu FAP": row["RECURSO_FAP"],
-            "Potencial": row["POTENCIAL"]
-        }
+                    linha = {
+                        "Empresa": dados.get("razao_social",""),
+                        "Fantasia": dados.get("nome_fantasia",""),
+                        "CNPJ": cnpj,
+                        "Município": dados.get("municipio") or row["cidade"],
+                        "UF": dados.get("uf") or row["uf"],
+                        "Telefone": dados.get("telefone",""),
+                        "WhatsApp": gerar_whatsapp(dados.get("telefone")),
+                        "CNAE": dados.get("cnae",""),
+                        "Afastamentos": row["AFASTAMENTOS"],
+                        "B91": row["B91"],
+                        "Acidente": row["TEVE_ACIDENTE"],
+                        "Recorreu FAP": row["RECURSO_FAP"],
+                        "Potencial": row["POTENCIAL"]
+                    }
 
-        resultados.append(linha)
+                    resultados.append(linha)
 
-        # 📋 atualiza tabela em tempo real
-        tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
+                    tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
 
-        time.sleep(0.3)
+                    time.sleep(0.3)
 
-    final = pd.DataFrame(resultados)
+                final = pd.DataFrame(resultados)
 
-    st.success(f"{len(final)} empresas processadas")
+                st.success(f"{len(final)} empresas processadas")
 
-    csv = final.to_csv(index=False).encode('utf-8')
+                csv = final.to_csv(index=False).encode('utf-8')
 
-    st.download_button(
-        "📤 Baixar Leads",
-        csv,
-        f"leads_{g}.csv",
-        key=f"download_{g}"
-    )
+                st.download_button(
+                    "📤 Baixar Leads",
+                    csv,
+                    f"leads_{g}.csv",
+                    key=f"download_{g}"
+                )
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
