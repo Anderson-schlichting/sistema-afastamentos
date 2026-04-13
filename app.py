@@ -219,7 +219,6 @@ if files:
 
             csv = final.to_csv(index=False).encode('utf-8')
             st.download_button("📤 Baixar Leads", csv, f"leads_{g}.csv")
-```
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
