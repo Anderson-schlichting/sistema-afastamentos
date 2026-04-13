@@ -200,59 +200,65 @@ with aba1:
 
             st.markdown(f"### 📍 {g} ({len(df_g)} empresas)")
 
-            if st.button(f"🚀 Processar {g}", key=f"btn_{g}"):
+if st.button(f"🚀 Processar {g}", key=f"btn_{g}"):
 
-                resultados = []
-                progress = st.progress(0)
-                tabela = st.empty()
+    resultados = []
 
-                total = len(df_g)
+    # 🔥 elementos fixos (não duplicam na tela)
+    status_text = st.empty()
+    progress_bar = st.progress(0)
+    tabela = st.empty()
 
-                for i, (_, row) in enumerate(df_g.iterrows()):
+    total = len(df_g)
 
-                    cnpj = row[col_cnpj]
+    for i, (_, row) in enumerate(df_g.iterrows()):
 
-                    dados = consultar_cnpj(cnpj)
+        cnpj = row[col_cnpj]
 
-                    percent = int((i + 1) / total * 100)
+        dados = consultar_cnpj(cnpj)
 
-                    st.write(f"Processando: {percent}%")
-                    progress.progress((i + 1) / total)
+        # 📊 cálculo percentual
+        percent = int((i + 1) / total * 100)
 
-                    linha = {
-                        "Empresa": dados.get("razao_social",""),
-                        "Fantasia": dados.get("nome_fantasia",""),
-                        "CNPJ": cnpj,
-                        "Município": dados.get("municipio") or row["cidade"],
-                        "UF": dados.get("uf") or row["uf"],
-                        "Telefone": dados.get("telefone",""),
-                        "WhatsApp": gerar_whatsapp(dados.get("telefone")),
-                        "CNAE": dados.get("cnae",""),
-                        "Afastamentos": row["AFASTAMENTOS"],
-                        "B91": row["B91"],
-                        "Acidente": row["TEVE_ACIDENTE"],
-                        "Recorreu FAP": row["RECURSO_FAP"],
-                        "Potencial": row["POTENCIAL"]
-                    }
+        # 🔥 atualização limpa (SEM criar várias linhas)
+        status_text.text(f"Processando: {percent}% ({i+1}/{total})")
+        progress_bar.progress((i + 1) / total)
 
-                    resultados.append(linha)
+        linha = {
+            "Empresa": dados.get("razao_social",""),
+            "Fantasia": dados.get("nome_fantasia",""),
+            "CNPJ": cnpj,
+            "Município": dados.get("municipio") or row["cidade"],
+            "UF": dados.get("uf") or row["uf"],
+            "Telefone": dados.get("telefone",""),
+            "WhatsApp": gerar_whatsapp(dados.get("telefone")),
+            "CNAE": dados.get("cnae",""),
+            "Afastamentos": row["AFASTAMENTOS"],
+            "B91": row["B91"],
+            "Acidente": row["TEVE_ACIDENTE"],
+            "Recorreu FAP": row["RECURSO_FAP"],
+            "Potencial": row["POTENCIAL"]
+        }
 
-                    tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
+        resultados.append(linha)
 
-                    time.sleep(0.3)
+        # 📋 atualiza tabela em tempo real
+        tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
 
-                final = pd.DataFrame(resultados)
+        time.sleep(0.3)
 
-                st.success(f"{len(final)} empresas processadas")
+    final = pd.DataFrame(resultados)
 
-                csv = final.to_csv(index=False).encode('utf-8')
+    st.success(f"{len(final)} empresas processadas")
 
-                st.download_button(
-                    "📤 Baixar Leads",
-                    csv,
-                    f"leads_{g}.csv",
-                    key=f"download_{g}"
-                )
+    csv = final.to_csv(index=False).encode('utf-8')
+
+    st.download_button(
+        "📤 Baixar Leads",
+        csv,
+        f"leads_{g}.csv",
+        key=f"download_{g}"
+    )
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
