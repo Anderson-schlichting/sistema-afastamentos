@@ -180,18 +180,7 @@ with aba1:
                         time.sleep(0.4)
 
                     progress.progress(min((i+lote)/total,1.0))
-df_view = pd.DataFrame(resultados)
-
-tabela.data_editor(
-    df_view,
-    use_container_width=True,
-    column_config={
-        "WhatsApp": st.column_config.LinkColumn(
-            "WhatsApp",
-            display_text="💬 Abrir"
-        )
-    }
-)
+                    tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
 
                     time.sleep(1.5)
 
