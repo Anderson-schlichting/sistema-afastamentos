@@ -3,7 +3,7 @@ import streamlit as st
 # 🔹 1. CRIA AS ABAS
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
-# 📊 ABA 1 - MÁQUINA DE VENDAS FINAL COMPLETA
+# 📊 ABA 1 - MÁQUINA DE VENDAS DEFINITIVA (HIBRIDA)
 # ================================
 with aba1:
 
@@ -42,7 +42,6 @@ with aba1:
     # ================================
     # 🔄 API ROBUSTA
     # ================================
-    @st.cache_data(ttl=86400)
     def consultar_cnpj(cnpj):
 
         urls = [
@@ -60,64 +59,54 @@ with aba1:
 
                     if origem == "brasilapi":
                         return {
-                            "razao_social": data.get("razao_social", ""),
-                            "nome_fantasia": data.get("nome_fantasia", ""),
-                            "municipio": data.get("municipio", ""),
-                            "uf": data.get("uf", ""),
-                            "cnae": data.get("cnae_fiscal_descricao", ""),
-                            "telefone": data.get("ddd_telefone_1", "")
+                            "razao_social": data.get("razao_social",""),
+                            "nome_fantasia": data.get("nome_fantasia",""),
+                            "municipio": data.get("municipio",""),
+                            "uf": data.get("uf",""),
+                            "cnae": data.get("cnae_fiscal_descricao",""),
+                            "telefone": data.get("ddd_telefone_1","")
                         }
 
                     if origem == "receitaws":
                         return {
-                            "razao_social": data.get("nome", ""),
-                            "nome_fantasia": data.get("fantasia", ""),
-                            "municipio": data.get("municipio", ""),
-                            "uf": data.get("uf", ""),
-                            "cnae": data.get("atividade_principal", [{}])[0].get("text", ""),
-                            "telefone": data.get("telefone", "")
+                            "razao_social": data.get("nome",""),
+                            "nome_fantasia": data.get("fantasia",""),
+                            "municipio": data.get("municipio",""),
+                            "uf": data.get("uf",""),
+                            "cnae": data.get("atividade_principal",[{}])[0].get("text",""),
+                            "telefone": data.get("telefone","")
                         }
 
                     if origem == "cnpjws":
-                        est = data.get("estabelecimento", {})
+                        est = data.get("estabelecimento",{})
                         return {
-                            "razao_social": data.get("razao_social", ""),
-                            "nome_fantasia": est.get("nome_fantasia", ""),
-                            "municipio": est.get("cidade", {}).get("nome", ""),
-                            "uf": est.get("estado", {}).get("sigla", ""),
-                            "cnae": est.get("atividade_principal", {}).get("descricao", ""),
-                            "telefone": est.get("telefone1", "")
+                            "razao_social": data.get("razao_social",""),
+                            "nome_fantasia": est.get("nome_fantasia",""),
+                            "municipio": est.get("cidade",{}).get("nome",""),
+                            "uf": est.get("estado",{}).get("sigla",""),
+                            "cnae": est.get("atividade_principal",{}).get("descricao",""),
+                            "telefone": est.get("telefone1","")
                         }
 
             except:
                 continue
 
-        return {
-            "razao_social": "",
-            "nome_fantasia": "",
-            "municipio": "",
-            "uf": "",
-            "cnae": "",
-            "telefone": ""
-        }
+        return {}
 
     # ================================
     # 💰 POTENCIAL
     # ================================
     def potencial_cliente(afast):
-        if afast >= 50:
-            return "🔥 ALTA CHANCE"
-        elif afast >= 20:
-            return "🟠 BOA CHANCE"
-        elif afast >= 10:
-            return "🟡 MÉDIA"
+        if afast >= 50: return "🔥 ALTA"
+        elif afast >= 20: return "🟠 BOA"
+        elif afast >= 10: return "🟡 MÉDIA"
         return "🟢 BAIXA"
 
     # ================================
     # 📲 WHATSAPP
     # ================================
-    def gerar_whatsapp(telefone):
-        tel = ''.join(filter(str.isdigit, str(telefone)))
+    def gerar_whatsapp(tel):
+        tel = ''.join(filter(str.isdigit, str(tel)))
         return f"https://wa.me/55{tel}" if tel else ""
 
     # ================================
@@ -128,7 +117,7 @@ with aba1:
     if files:
 
         if len(files) > 5:
-            st.error("⚠️ Máximo de 5 arquivos")
+            st.error("Máximo de 5 arquivos")
             st.stop()
 
         dfs = []
@@ -149,110 +138,84 @@ with aba1:
         # ================================
         col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
-        df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r"\D", "", regex=True).str.zfill(14)
-
+        df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r"\D","",regex=True).str.zfill(14)
         df = df.drop_duplicates(subset=[col_cnpj])
 
         # ================================
-        # 📍 MUNICÍPIO (OPCIONAL)
+        # 📍 MUNICÍPIO
         # ================================
         col_municipio = [c for c in df.columns if "MUNIC" in c.upper()]
 
         if col_municipio:
             col_municipio = col_municipio[0]
 
-            df["cidade_ibge"] = df[col_municipio].apply(extrair_cidade)
-            df["uf_ibge"] = df[col_municipio].apply(extrair_uf_ibge)
-
-            df = df[df["uf_ibge"] != ""]
-
-            agrupado = df.groupby(col_cnpj).agg({
-                "cidade_ibge": "first",
-                "uf_ibge": "first"
-            }).reset_index()
+            df["cidade"] = df[col_municipio].apply(extrair_cidade)
+            df["uf"] = df[col_municipio].apply(extrair_uf_ibge)
 
         else:
-            agrupado = df[[col_cnpj]].copy()
-            agrupado["cidade_ibge"] = ""
-            agrupado["uf_ibge"] = ""
+            df["cidade"] = ""
+            df["uf"] = ""
 
-        agrupado["Afastamentos"] = 1
+        df["Afastamentos"] = 1
 
-        st.success(f"✅ {len(agrupado)} empresas únicas carregadas")
+        st.success(f"{len(df)} empresas carregadas")
 
-        estados = agrupado["uf_ibge"].unique() if col_municipio else ["BR"]
+        # ================================
+        # 🚀 CONSULTA
+        # ================================
+        if st.button("🚀 Processar Empresas"):
 
-        for uf in estados:
+            resultados = []
+            progress = st.progress(0)
+            tabela = st.empty()
 
-            df_uf = agrupado if uf == "BR" else agrupado[agrupado["uf_ibge"] == uf]
+            total = len(df)
+            lote = 10
 
-            st.markdown(f"### 📍 {uf} ({len(df_uf)} empresas)")
+            for i in range(0, total, lote):
 
-            if st.button(f"🚀 Consultar {uf}"):
+                bloco = df.iloc[i:i+lote]
 
-                resultados = []
+                for _, row in bloco.iterrows():
 
-                progress = st.progress(0)
-                status = st.empty()
-                tabela = st.empty()
+                    cnpj = row[col_cnpj]
+                    dados = {}
 
-                total = len(df_uf)
-                lote = 10
+                    for tentativa in range(3):
+                        dados = consultar_cnpj(cnpj)
+                        if dados.get("razao_social"):
+                            break
+                        time.sleep(1)
 
-                for i in range(0, total, lote):
+                    linha = {
+                        "Razão Social": dados.get("razao_social","NÃO ENCONTRADO"),
+                        "Fantasia": dados.get("nome_fantasia",""),
+                        "CNPJ": cnpj,
+                        "Município": dados.get("municipio") or row["cidade"],
+                        "UF": dados.get("uf") or row["uf"],
+                        "CNAE": dados.get("cnae",""),
+                        "Telefone": dados.get("telefone",""),
+                        "WhatsApp": gerar_whatsapp(dados.get("telefone")),
+                        "Afastamentos": row["Afastamentos"],
+                        "Potencial": potencial_cliente(row["Afastamentos"])
+                    }
 
-                    bloco = df_uf.iloc[i:i+lote]
+                    resultados.append(linha)
 
-                    for _, row in bloco.iterrows():
+                    time.sleep(0.4)
 
-                        cnpj = row[col_cnpj]
-                        dados = {}
+                progress.progress(min((i+lote)/total,1.0))
 
-                        for tentativa in range(3):
-                            dados = consultar_cnpj(cnpj)
-                            if dados.get("razao_social"):
-                                break
-                            time.sleep(1)
+                tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
 
-                        municipio = dados.get("municipio") or row["cidade_ibge"]
-                        uf_final = dados.get("uf") or row["uf_ibge"]
+                time.sleep(1.5)
 
-                        linha = {
-                            "Razão Social": dados.get("razao_social") or "NÃO ENCONTRADO",
-                            "Nome Fantasia": dados.get("nome_fantasia", ""),
-                            "CNPJ": cnpj,
-                            "Município": municipio,
-                            "UF": uf_final,
-                            "CNAE": dados.get("cnae", ""),
-                            "Telefone": dados.get("telefone", ""),
-                            "WhatsApp": gerar_whatsapp(dados.get("telefone")),
-                            "Afastamentos": row["Afastamentos"],
-                            "Potencial": potencial_cliente(row["Afastamentos"])
-                        }
+            final = pd.DataFrame(resultados)
 
-                        resultados.append(linha)
+            st.success("Processamento finalizado")
 
-                        time.sleep(0.4)
-
-                    progresso = min((i + len(bloco)) / total, 1.0)
-                    progress.progress(progresso)
-                    status.write(f"{uf} → {int(progresso*100)}%")
-
-                    parcial = pd.DataFrame(resultados)
-
-                    tabela.dataframe(
-                        parcial.sort_values("Afastamentos", ascending=False),
-                        use_container_width=True
-                    )
-
-                    time.sleep(1.5)
-
-                final = pd.DataFrame(resultados)
-
-                st.success(f"✅ {len(final)} empresas processadas")
-
-                csv = final.to_csv(index=False).encode('utf-8')
-                st.download_button("📤 Baixar Leads", csv, f"leads_{uf}.csv")
+            csv = final.to_csv(index=False).encode('utf-8')
+            st.download_button("📤 Baixar Leads", csv, "leads.csv")
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
