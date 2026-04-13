@@ -1,3 +1,7 @@
+import streamlit as st
+
+# 🔹 1. CRIA AS ABAS
+aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
 # 📊 ABA 1 NOVA (OTIMIZADA)
 # ================================
