@@ -3,7 +3,7 @@ import streamlit as st
 # 🔹 1. CRIA AS ABAS
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
-# 📊 ABA 1 FINAL - IBGE CORRETO + BLOCOS POR UF
+# 📊 ABA 1 - MÁQUINA DE VENDAS
 # ================================
 with aba1:
 
@@ -12,7 +12,7 @@ with aba1:
     import time
     import streamlit as st
 
-    st.subheader("🚀 Prospecção Inteligente por Estado")
+    st.subheader("🚀 Máquina de Prospecção Inteligente")
 
     # ================================
     # 🧠 IBGE → UF
@@ -33,9 +33,6 @@ with aba1:
         except:
             return ""
 
-    # ================================
-    # 🏙️ EXTRAIR CIDADE
-    # ================================
     def extrair_cidade(valor):
         try:
             return str(valor).split("-")[1].strip().upper()
@@ -43,7 +40,7 @@ with aba1:
             return ""
 
     # ================================
-    # 🔄 API RECEITA
+    # 🔄 API RECEITA (ROBUSTA)
     # ================================
     @st.cache_data(ttl=86400)
     def consultar_cnpj(cnpj):
@@ -55,7 +52,8 @@ with aba1:
 
         for url in apis:
             try:
-                r = requests.get(url, timeout=5)
+                r = requests.get(url, timeout=10)
+
                 if r.status_code == 200:
                     data = r.json()
 
@@ -63,12 +61,34 @@ with aba1:
                         "razao_social": data.get("razao_social") or data.get("nome") or "",
                         "nome_fantasia": data.get("nome_fantasia") or data.get("fantasia") or "",
                         "municipio": data.get("municipio") or data.get("cidade") or "",
-                        "cnae": data.get("cnae_fiscal_descricao") or data.get("atividade_principal", [{}])[0].get("text", "")
+                        "cnae": data.get("cnae_fiscal_descricao") or data.get("atividade_principal", [{}])[0].get("text", ""),
+                        "telefone": data.get("ddd_telefone_1") or data.get("telefone") or ""
                     }
             except:
                 continue
 
         return {}
+
+    # ================================
+    # 💰 POTENCIAL CLIENTE
+    # ================================
+    def potencial_cliente(afast):
+        if afast >= 50:
+            return "🔥 ALTA CHANCE"
+        elif afast >= 20:
+            return "🟠 BOA CHANCE"
+        elif afast >= 10:
+            return "🟡 MÉDIA"
+        return "🟢 BAIXA"
+
+    # ================================
+    # 📲 WHATSAPP
+    # ================================
+    def gerar_whatsapp(telefone):
+        tel = ''.join(filter(str.isdigit, str(telefone)))
+        if not tel:
+            return ""
+        return f"https://wa.me/55{tel}"
 
     # ================================
     # 📥 UPLOAD
@@ -113,7 +133,6 @@ with aba1:
         df["cidade_ibge"] = df[col_municipio].apply(extrair_cidade)
         df["uf_ibge"] = df[col_municipio].apply(extrair_uf_ibge)
 
-        # remover inválidos
         df = df[df["uf_ibge"] != ""]
 
         # ================================
@@ -126,15 +145,13 @@ with aba1:
 
         agrupado["Afastamentos"] = df.groupby(col_cnpj).size().values
 
-        st.success(f"✅ {len(agrupado)} empresas válidas")
+        st.success(f"✅ {len(agrupado)} empresas carregadas")
 
-        # ================================
-        # 📂 ESTADOS
-        # ================================
         estados = sorted(agrupado["uf_ibge"].unique())
 
-        st.markdown("## 📂 Estados encontrados")
-
+        # ================================
+        # 📂 BLOCOS POR UF
+        # ================================
         for uf in estados:
 
             df_uf = agrupado[agrupado["uf_ibge"] == uf]
@@ -165,12 +182,15 @@ with aba1:
                         "CNPJ": cnpj,
                         "Município": municipio,
                         "CNAE": dados.get("cnae", ""),
-                        "Afastamentos": row["Afastamentos"]
+                        "Telefone": dados.get("telefone", ""),
+                        "WhatsApp": gerar_whatsapp(dados.get("telefone")),
+                        "Afastamentos": row["Afastamentos"],
+                        "Potencial": potencial_cliente(row["Afastamentos"])
                     }
 
                     resultados.append(linha)
 
-                    progresso = (i + 1) / total
+                    progresso = min((i + 1) / total, 1.0)
                     progress.progress(progresso)
                     status.write(f"{uf} → {int(progresso*100)}%")
 
@@ -181,7 +201,7 @@ with aba1:
                         use_container_width=True
                     )
 
-                    time.sleep(0.03)
+                    time.sleep(0.05)
 
                 final = pd.DataFrame(resultados)
 
@@ -189,6 +209,23 @@ with aba1:
                     st.warning("⚠️ Nenhum dado retornado")
                 else:
                     st.success(f"✅ {len(final)} empresas processadas em {uf}")
+
+                    # ================================
+                    # 📊 DASHBOARD
+                    # ================================
+                    st.markdown("#### 📊 Resumo")
+
+                    col1, col2, col3 = st.columns(3)
+
+                    col1.metric("Empresas", len(final))
+                    col2.metric("Leads Quentes", len(final[final["Potencial"].str.contains("ALTA|BOA")]))
+                    col3.metric("Top Afastamento", int(final["Afastamentos"].max()))
+
+                    # ================================
+                    # 📤 EXPORTAÇÃO
+                    # ================================
+                    csv = final.to_csv(index=False).encode('utf-8')
+                    st.download_button("📤 Baixar Leads", csv, f"leads_{uf}.csv")
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
