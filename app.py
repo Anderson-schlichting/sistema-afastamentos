@@ -3,7 +3,7 @@ import streamlit as st
 # 🔹 1. CRIA AS ABAS
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
-# 📊 ABA 1 - MÁQUINA DE VENDAS (AJUSTE RECEITA)
+# 📊 ABA 1 - MÁQUINA DE VENDAS FINAL (ULTRA ESTÁVEL)
 # ================================
 with aba1:
 
@@ -40,7 +40,7 @@ with aba1:
             return ""
 
     # ================================
-    # 🔄 API ROBUSTA (AJUSTADA)
+    # 🔄 API ULTRA ROBUSTA (3 FONTES + RETRY)
     # ================================
     @st.cache_data(ttl=86400)
     def consultar_cnpj(cnpj):
@@ -90,7 +90,7 @@ with aba1:
                 continue
 
         return {
-            "razao_social": "NÃO ENCONTRADO",
+            "razao_social": "",
             "nome_fantasia": "",
             "municipio": "",
             "cnae": "",
@@ -151,11 +151,13 @@ with aba1:
 
         for uf in estados:
 
-            df_uf = agrupado[agrupado["uf_ibge"] == uf]
+            df_uf = agrupado[agrupado["uf_ibge"] == uf].copy()
 
             st.markdown(f"### 📍 {uf} ({len(df_uf)} empresas)")
 
             if st.button(f"🚀 Consultar {uf}"):
+
+                st.info(f"Consultando {len(df_uf)} empresas do estado {uf}")
 
                 resultados = []
 
@@ -164,30 +166,48 @@ with aba1:
                 tabela = st.empty()
 
                 total = len(df_uf)
+                lote = 10
 
-                for i, row in df_uf.iterrows():
+                for i in range(0, total, lote):
 
-                    cnpj = row[col_cnpj]
+                    bloco = df_uf.iloc[i:i+lote]
 
-                    dados = consultar_cnpj(cnpj)
+                    for _, row in bloco.iterrows():
 
-                    municipio = dados.get("municipio") or row["cidade_ibge"]
+                        if row["uf_ibge"] != uf:
+                            continue
 
-                    linha = {
-                        "Razão Social": dados.get("razao_social") or "NÃO ENCONTRADO",
-                        "Nome Fantasia": dados.get("nome_fantasia", ""),
-                        "CNPJ": cnpj,
-                        "Município": municipio,
-                        "CNAE": dados.get("cnae", ""),
-                        "Telefone": dados.get("telefone", ""),
-                        "WhatsApp": gerar_whatsapp(dados.get("telefone")),
-                        "Afastamentos": row["Afastamentos"],
-                        "Potencial": potencial_cliente(row["Afastamentos"])
-                    }
+                        cnpj = row[col_cnpj]
+                        dados = {}
 
-                    resultados.append(linha)
+                        # 🔁 retry automático
+                        for tentativa in range(3):
+                            dados = consultar_cnpj(cnpj)
 
-                    progresso = min((i + 1) / total, 1.0)
+                            if dados.get("razao_social"):
+                                break
+
+                            time.sleep(1)
+
+                        municipio = dados.get("municipio") or row["cidade_ibge"]
+
+                        linha = {
+                            "Razão Social": dados.get("razao_social") or "NÃO ENCONTRADO",
+                            "Nome Fantasia": dados.get("nome_fantasia", ""),
+                            "CNPJ": cnpj,
+                            "Município": municipio,
+                            "CNAE": dados.get("cnae", ""),
+                            "Telefone": dados.get("telefone", ""),
+                            "WhatsApp": gerar_whatsapp(dados.get("telefone")),
+                            "Afastamentos": row["Afastamentos"],
+                            "Potencial": potencial_cliente(row["Afastamentos"])
+                        }
+
+                        resultados.append(linha)
+
+                        time.sleep(0.4)  # 🔥 MAIS LENTO = MAIS PRECISO
+
+                    progresso = min((i + len(bloco)) / total, 1.0)
                     progress.progress(progresso)
                     status.write(f"{uf} → {int(progresso*100)}%")
 
@@ -198,14 +218,14 @@ with aba1:
                         use_container_width=True
                     )
 
-                    time.sleep(0.05)
+                    time.sleep(1.5)  # pausa entre blocos
 
                 final = pd.DataFrame(resultados)
 
                 st.success(f"✅ {len(final)} empresas processadas em {uf}")
 
                 st.info(f"""
-📊 Qualidade dos dados:
+📊 Qualidade:
 - Total: {len(final)}
 - Com dados: {len(final[final['Razão Social'] != 'NÃO ENCONTRADO'])}
 - Falhas: {len(final[final['Razão Social'] == 'NÃO ENCONTRADO'])}
