@@ -3,43 +3,40 @@ import streamlit as st
 # 🔹 1. CRIA AS ABAS
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
-# 📊 ABA 1 NOVA (OTIMIZADA)
+# 📊 ABA 1 FINAL COM BLOCOS POR UF
 # ================================
 with aba1:
 
     import pandas as pd
     import requests
     import time
-    import os
     import streamlit as st
 
-    st.subheader("📊 Prospecção Inteligente")
-
-    CACHE_FILE = "cache_cnpj.csv"
+    st.subheader("🚀 Prospecção Inteligente por Estado")
 
     # ================================
-    # 🔄 CONSULTA MULTI API
+    # 🔄 API
     # ================================
+    @st.cache_data(ttl=86400)
     def consultar_cnpj(cnpj):
 
         apis = [
             f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}",
-            f"https://receitaws.com.br/v1/cnpj/{cnpj}",
-            f"https://api.cnpj.ws/cnpj/{cnpj}"
+            f"https://receitaws.com.br/v1/cnpj/{cnpj}"
         ]
 
         for url in apis:
             try:
                 r = requests.get(url, timeout=5)
-
                 if r.status_code == 200:
                     data = r.json()
 
                     return {
-                        "empresa": data.get("razao_social") or data.get("nome") or "",
-                        "telefone": data.get("ddd_telefone_1") or data.get("telefone") or "",
-                        "cidade": data.get("municipio") or data.get("cidade") or "",
+                        "razao_social": data.get("razao_social") or data.get("nome") or "",
+                        "nome_fantasia": data.get("nome_fantasia") or data.get("fantasia") or "",
+                        "municipio": data.get("municipio") or data.get("cidade") or "",
                         "uf": data.get("uf") or "",
+                        "cnae": data.get("cnae_fiscal_descricao") or data.get("atividade_principal", [{}])[0].get("text", "")
                     }
             except:
                 continue
@@ -47,39 +44,18 @@ with aba1:
         return {}
 
     # ================================
-    # 🎯 SCORE
-    # ================================
-    def calcular_score(qtd):
-        if qtd >= 30:
-            return "🔴 QUENTE"
-        elif qtd >= 15:
-            return "🟠 MÉDIO"
-        return "🟢 FRIO"
-
-    # ================================
     # 📥 UPLOAD
     # ================================
-    file = st.file_uploader("Envie CSV ou Excel")
+    file = st.file_uploader("Envie sua base")
 
     if file:
 
-        if file.name.endswith(".csv"):
-            df = pd.read_csv(file, sep=';', encoding='latin1')
-        else:
-            df = pd.read_excel(file)
+        df = pd.read_csv(file, sep=';', encoding='latin1') if file.name.endswith(".csv") else pd.read_excel(file)
 
         df.columns = df.columns.astype(str)
 
-        # ================================
-        # 🔍 IDENTIFICAR CNPJ
-        # ================================
-        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()]
-
-        if not col_cnpj:
-            st.error("Coluna CNPJ não encontrada")
-            st.stop()
-
-        col_cnpj = col_cnpj[0]
+        # CNPJ
+        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
         df[col_cnpj] = (
             df[col_cnpj]
@@ -88,104 +64,84 @@ with aba1:
             .str.zfill(14)
         )
 
-        # ================================
-        # 📊 AGRUPAR (AFASTAMENTOS)
-        # ================================
-        agrupado = df.groupby(col_cnpj).size().reset_index(name="Afastamentos")
-        agrupado["Score"] = agrupado["Afastamentos"].apply(calcular_score)
+        # IBGE
+        col_cidade = [c for c in df.columns if "MUNIC" in c.upper() or "CIDADE" in c.upper()]
+        col_uf = [c for c in df.columns if "UF" in c.upper()]
+
+        df["cidade_ibge"] = df[col_cidade[0]].astype(str).str.upper() if col_cidade else ""
+        df["uf_ibge"] = df[col_uf[0]].astype(str).str.upper() if col_uf else ""
+
+        # AGRUPAR
+        agrupado = df.groupby(col_cnpj).agg({
+            "cidade_ibge": "first",
+            "uf_ibge": "first"
+        }).reset_index()
+
+        agrupado["Afastamentos"] = df.groupby(col_cnpj).size().values
+
+        st.success(f"{len(agrupado)} empresas carregadas")
 
         # ================================
-        # 📂 CACHE
+        # 📍 BLOCOS POR UF
         # ================================
-        if os.path.exists(CACHE_FILE):
-            cache = pd.read_csv(CACHE_FILE)
-        else:
-            cache = pd.DataFrame(columns=["CNPJ","empresa","telefone","cidade","uf"])
+        estados = sorted(agrupado["uf_ibge"].dropna().unique())
 
-        # ================================
-        # 📦 DIVIDIR POR ESTADO
-        # ================================
-        st.markdown("## 📂 Blocos por Estado")
-
-        # inicialmente sem UF → será preenchido pela API
-        agrupado["uf"] = ""
-
-        estados = ["SC","PR","RS","SP","MG"]
+        st.markdown("## 📂 Estados encontrados")
 
         for uf in estados:
 
-            st.markdown(f"### 📍 Estado: {uf}")
+            if not uf:
+                continue
 
-            if st.button(f"Consultar {uf}"):
+            df_uf = agrupado[agrupado["uf_ibge"] == uf]
 
-                df_uf = agrupado.copy()
+            st.markdown(f"### 📍 {uf} ({len(df_uf)} empresas)")
+
+            if st.button(f"🚀 Consultar {uf}"):
 
                 resultados = []
-                consultar = []
-
-                # ================================
-                # 🔍 CACHE
-                # ================================
-                for cnpj in df_uf[col_cnpj]:
-
-                    encontrado = cache[cache["CNPJ"] == cnpj]
-
-                    if not encontrado.empty:
-                        resultados.append(encontrado.iloc[0].to_dict())
-                    else:
-                        consultar.append(cnpj)
-
-                st.info(f"Cache: {len(resultados)} | Consultar: {len(consultar)}")
 
                 progress = st.progress(0)
+                status = st.empty()
+                tabela = st.empty()
 
-                # ================================
-                # ⚡ PROCESSAMENTO EM LOTE (10)
-                # ================================
-                lote = 10
+                total = len(df_uf)
 
-                for i in range(0, len(consultar), lote):
+                for i, row in df_uf.iterrows():
 
-                    bloco = consultar[i:i+lote]
+                    cnpj = row[col_cnpj]
 
-                    for cnpj in bloco:
+                    dados = consultar_cnpj(cnpj)
 
-                        dados = consultar_cnpj(cnpj)
+                    municipio = dados.get("municipio") or row["cidade_ibge"]
 
-                        if dados.get("empresa"):
-                            registro = {"CNPJ": cnpj, **dados}
-                            resultados.append(registro)
+                    linha = {
+                        "Razão Social": dados.get("razao_social", ""),
+                        "Nome Fantasia": dados.get("nome_fantasia", ""),
+                        "CNPJ": cnpj,
+                        "Município": municipio,
+                        "CNAE": dados.get("cnae", ""),
+                        "Afastamentos": row["Afastamentos"]
+                    }
 
-                            cache = pd.concat([cache, pd.DataFrame([registro])], ignore_index=True)
+                    resultados.append(linha)
 
-                    progress.progress(min((i+len(bloco))/len(consultar), 1.0))
-                    time.sleep(0.3)
+                    progresso = (i + 1) / total
+                    progress.progress(progresso)
+                    status.write(f"{uf} → {int(progresso*100)}%")
 
-                cache.drop_duplicates(subset=["CNPJ"], inplace=True)
-                cache.to_csv(CACHE_FILE, index=False)
+                    parcial = pd.DataFrame(resultados)
 
-                df_api = pd.DataFrame(resultados)
+                    tabela.dataframe(
+                        parcial.sort_values("Afastamentos", ascending=False),
+                        use_container_width=True
+                    )
 
-                final = agrupado.merge(
-                    df_api,
-                    left_on=col_cnpj,
-                    right_on="CNPJ",
-                    how="left"
-                )
+                    time.sleep(0.1)
 
-                # ================================
-                # 📍 FILTRAR ESTADO
-                # ================================
-                final = final[final["uf"] == uf]
+                final = pd.DataFrame(resultados)
 
-                # ================================
-                # 📊 RANKING FINAL
-                # ================================
-                final = final.sort_values("Afastamentos", ascending=False)
-
-                st.success(f"{len(final)} empresas encontradas em {uf}")
-
-                st.dataframe(final, use_container_width=True)
+                st.success(f"✅ {len(final)} empresas processadas em {uf}")
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
