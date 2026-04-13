@@ -3,7 +3,7 @@ import streamlit as st
 # 🔹 1. CRIA AS ABAS
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
-# 📊 ABA 1 - FINAL COM ESTADOS + AVULSOS
+# 📊 ABA 1 - FINAL COM BOTÃO WHATSAPP
 # ================================
 with aba1:
 
@@ -78,6 +78,9 @@ with aba1:
         elif af >= 10: return "🟡 MÉDIA"
         return "🟢 BAIXA"
 
+    # ================================
+    # 📲 WHATSAPP
+    # ================================
     def gerar_whatsapp(t):
         t = ''.join(filter(str.isdigit, str(t)))
         return f"https://wa.me/55{t}" if t else ""
@@ -108,7 +111,7 @@ with aba1:
         df = df.drop_duplicates(subset=[col_cnpj])
 
         # ================================
-        # 📍 DETECTA MUNICÍPIO
+        # 📍 MUNICÍPIO
         # ================================
         col_municipio = [c for c in df.columns if "MUNIC" in c.upper()]
 
@@ -124,7 +127,7 @@ with aba1:
         df["Afastamentos"] = 1
 
         # ================================
-        # 📂 ORGANIZA GRUPOS
+        # 📂 GRUPOS
         # ================================
         df["grupo"] = df["uf"].apply(lambda x: x if x else "AVULSOS")
 
@@ -142,7 +145,6 @@ with aba1:
 
                 resultados = []
                 progress = st.progress(0)
-                tabela = st.empty()
 
                 total = len(df_g)
                 lote = 10
@@ -162,14 +164,16 @@ with aba1:
                                 break
                             time.sleep(1)
 
+                        telefone = dados.get("telefone","")
+
                         linha = {
                             "Empresa": dados.get("razao_social","NÃO ENCONTRADO"),
                             "Fantasia": dados.get("nome_fantasia",""),
                             "CNPJ": cnpj,
                             "Município": dados.get("municipio") or row["cidade"],
                             "UF": dados.get("uf") or row["uf"],
-                            "Telefone": dados.get("telefone",""),
-                            "WhatsApp": gerar_whatsapp(dados.get("telefone")),
+                            "Telefone": telefone,
+                            "WhatsApp": gerar_whatsapp(telefone),
                             "CNAE": dados.get("cnae",""),
                             "Afastamentos": row["Afastamentos"],
                             "Potencial": potencial(row["Afastamentos"])
@@ -180,14 +184,29 @@ with aba1:
                         time.sleep(0.4)
 
                     progress.progress(min((i+lote)/total,1.0))
-                    tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
-
                     time.sleep(1.5)
 
                 final = pd.DataFrame(resultados)
 
                 st.success(f"{len(final)} empresas processadas")
 
+                # ================================
+                # 📲 TABELA COM BOTÃO
+                # ================================
+                st.data_editor(
+                    final,
+                    use_container_width=True,
+                    column_config={
+                        "WhatsApp": st.column_config.LinkColumn(
+                            "WhatsApp",
+                            display_text="💬 Abrir"
+                        )
+                    }
+                )
+
+                # ================================
+                # 📤 EXPORTAR
+                # ================================
                 csv = final.to_csv(index=False).encode('utf-8')
                 st.download_button("📤 Baixar Leads", csv, f"leads_{g}.csv")
 # ================================
