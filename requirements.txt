@@ -4,3 +4,4 @@ requests
 openpyxl
 reportlab
 plotly
+pdfplumber
