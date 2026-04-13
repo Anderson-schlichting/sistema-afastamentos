@@ -194,13 +194,13 @@ with aba1:
 
         st.markdown("## 📂 Grupos encontrados")
 
-        for g in grupos:
+for g in grupos:
 
-            df_g = agrupado[agrupado["grupo"] == g]
+    df_g = agrupado[agrupado["grupo"] == g]
 
-            st.markdown(f"### 📍 {g} ({len(df_g)} empresas)")
+    st.markdown(f"### 📍 {g} ({len(df_g)} empresas)")
 
-if st.button(f"🚀 Processar {g}", key=f"btn_{g}"):
+    if st.button(f"🚀 Processar {g}", key=f"btn_{g}"):
 
     resultados = []
 
