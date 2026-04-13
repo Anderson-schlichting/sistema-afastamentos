@@ -123,17 +123,28 @@ with aba1:
     # ================================
     # 📥 UPLOAD
     # ================================
-    file = st.file_uploader("Envie sua base")
+    files = st.file_uploader("Envie até 5 planilhas", accept_multiple_files=True)
 
-    if file:
+    if files:
 
-        df = pd.read_csv(file, sep=';', encoding='latin1') if file.name.endswith(".csv") else pd.read_excel(file)
+    if len(files) > 5:
+        st.error("⚠️ Máximo de 5 arquivos")
+        st.stop()
 
-        df.columns = df.columns.astype(str)
+    dfs = []
 
-        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
+    for file in files:
 
-        df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r"\D", "", regex=True).str.zfill(14)
+        if file.name.endswith(".csv"):
+            df_temp = pd.read_csv(file, sep=';', encoding='latin1')
+        else:
+            df_temp = pd.read_excel(file)
+
+        dfs.append(df_temp)
+
+    df = pd.concat(dfs, ignore_index=True)
+
+    df.drop_duplicates(inplace=True)
 
         # ================================
         # 🔍 VERIFICA SE TEM MUNICÍPIO
