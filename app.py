@@ -19,10 +19,10 @@ with aba1:
     def carregar_editais():
 
         arquivos = [
-            "editais/2021.pdf",
-            "editais/2022.pdf",
-            "editais/2023.pdf",
-            "editais/2024.pdf"
+            "editoriais/2021.pdf",
+            "editoriais/2022.pdf",
+            "editoriais/2023.pdf",
+            "editoriais/2024.pdf"
         ]
 
         cnpjs = set()
