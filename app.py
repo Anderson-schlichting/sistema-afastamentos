@@ -3,7 +3,7 @@ import streamlit as st
 # 🔹 1. CRIA AS ABAS
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
-# 📊 ABA 1 FINAL COM BLOCOS POR UF
+# 📊 ABA 1 FINAL - BLOCOS POR UF + IBGE LIMPO
 # ================================
 with aba1:
 
@@ -13,6 +13,31 @@ with aba1:
     import streamlit as st
 
     st.subheader("🚀 Prospecção Inteligente por Estado")
+
+    # ================================
+    # 🧠 MAPA UF (NOME → SIGLA)
+    # ================================
+    mapa_uf = {
+        "ACRE":"AC","ALAGOAS":"AL","AMAPÁ":"AP","AMAZONAS":"AM",
+        "BAHIA":"BA","CEARÁ":"CE","DISTRITO FEDERAL":"DF","ESPÍRITO SANTO":"ES",
+        "GOIÁS":"GO","MARANHÃO":"MA","MATO GROSSO":"MT","MATO GROSSO DO SUL":"MS",
+        "MINAS GERAIS":"MG","PARÁ":"PA","PARAÍBA":"PB","PARANÁ":"PR",
+        "PERNAMBUCO":"PE","PIAUÍ":"PI","RIO DE JANEIRO":"RJ",
+        "RIO GRANDE DO NORTE":"RN","RIO GRANDE DO SUL":"RS",
+        "RONDÔNIA":"RO","RORAIMA":"RR","SANTA CATARINA":"SC",
+        "SÃO PAULO":"SP","SERGIPE":"SE","TOCANTINS":"TO"
+    }
+
+    def normalizar_uf(valor):
+        valor = str(valor).strip().upper()
+
+        if len(valor) == 2:
+            return valor
+
+        if valor in mapa_uf:
+            return mapa_uf[valor]
+
+        return ""
 
     # ================================
     # 🔄 API
@@ -28,6 +53,7 @@ with aba1:
         for url in apis:
             try:
                 r = requests.get(url, timeout=5)
+
                 if r.status_code == 200:
                     data = r.json()
 
@@ -54,8 +80,16 @@ with aba1:
 
         df.columns = df.columns.astype(str)
 
-        # CNPJ
-        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
+        # ================================
+        # 🔍 CNPJ
+        # ================================
+        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()]
+
+        if not col_cnpj:
+            st.error("❌ Coluna CNPJ não encontrada")
+            st.stop()
+
+        col_cnpj = col_cnpj[0]
 
         df[col_cnpj] = (
             df[col_cnpj]
@@ -64,14 +98,18 @@ with aba1:
             .str.zfill(14)
         )
 
-        # IBGE
+        # ================================
+        # 📍 IBGE
+        # ================================
         col_cidade = [c for c in df.columns if "MUNIC" in c.upper() or "CIDADE" in c.upper()]
         col_uf = [c for c in df.columns if "UF" in c.upper()]
 
         df["cidade_ibge"] = df[col_cidade[0]].astype(str).str.upper() if col_cidade else ""
-        df["uf_ibge"] = df[col_uf[0]].astype(str).str.upper() if col_uf else ""
+        df["uf_ibge"] = df[col_uf[0]].apply(normalizar_uf) if col_uf else ""
 
-        # AGRUPAR
+        # ================================
+        # 📊 AGRUPAR
+        # ================================
         agrupado = df.groupby(col_cnpj).agg({
             "cidade_ibge": "first",
             "uf_ibge": "first"
@@ -79,19 +117,19 @@ with aba1:
 
         agrupado["Afastamentos"] = df.groupby(col_cnpj).size().values
 
-        st.success(f"{len(agrupado)} empresas carregadas")
+        # remover lixo
+        agrupado = agrupado[agrupado["uf_ibge"] != ""]
+
+        st.success(f"✅ {len(agrupado)} empresas válidas")
 
         # ================================
-        # 📍 BLOCOS POR UF
+        # 📂 ESTADOS
         # ================================
-        estados = sorted(agrupado["uf_ibge"].dropna().unique())
+        estados = sorted(agrupado["uf_ibge"].unique())
 
         st.markdown("## 📂 Estados encontrados")
 
         for uf in estados:
-
-            if not uf:
-                continue
 
             df_uf = agrupado[agrupado["uf_ibge"] == uf]
 
@@ -137,11 +175,14 @@ with aba1:
                         use_container_width=True
                     )
 
-                    time.sleep(0.1)
+                    time.sleep(0.05)
 
                 final = pd.DataFrame(resultados)
 
-                st.success(f"✅ {len(final)} empresas processadas em {uf}")
+                if final.empty:
+                    st.warning("⚠️ Nenhum dado retornado")
+                else:
+                    st.success(f"✅ {len(final)} empresas processadas em {uf}")
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
