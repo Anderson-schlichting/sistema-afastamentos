@@ -106,9 +106,23 @@ if files:
     df = pd.concat(dfs, ignore_index=True)
     df.columns = df.columns.astype(str)
 
-    col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
+    # ================================
+    # 🧾 IDENTIFICA CNPJ
+    # ================================
+    col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()]
 
-    df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r"\D","",regex=True).str.zfill(14)
+    if not col_cnpj:
+        st.error("❌ Nenhuma coluna de CNPJ encontrada")
+        st.stop()
+
+    col_cnpj = col_cnpj[0]
+
+    df[col_cnpj] = (
+        df[col_cnpj]
+        .astype(str)
+        .str.replace(r"\D", "", regex=True)
+        .str.zfill(14)
+    )
 
     # ================================
     # 📍 MUNICÍPIO / UF
@@ -128,11 +142,15 @@ if files:
     # ================================
     df["Afastamentos"] = 1
 
-    df = df.groupby(col_cnpj).agg({
-        "cidade": "first",
-        "uf": "first",
-        "Afastamentos": "sum"
-    }).reset_index()
+    df = (
+        df.groupby(col_cnpj)
+        .agg({
+            "cidade": "first",
+            "uf": "first",
+            "Afastamentos": "sum"
+        })
+        .reset_index()
+    )
 
     # ================================
     # 📂 GRUPOS
@@ -190,7 +208,7 @@ if files:
 
                     time.sleep(0.4)
 
-                progress.progress(min((i+lote)/total,1.0))
+                progress.progress(min((i+lote)/total, 1.0))
                 tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
 
                 time.sleep(1.5)
