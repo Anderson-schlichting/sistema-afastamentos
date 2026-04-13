@@ -3,7 +3,7 @@ import streamlit as st
 # 🔹 1. CRIA AS ABAS
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
-# 📊 ABA 1 - MÁQUINA DE PROSPECÇÃO FINAL (CORRIGIDA)
+# 📊 ABA 1 - FINAL COM ESTADOS + AVULSOS
 # ================================
 with aba1:
 
@@ -11,36 +11,25 @@ with aba1:
     import requests
     import time
     import streamlit as st
-    from concurrent.futures import ThreadPoolExecutor
 
-    st.subheader("🚀 Máquina de Prospecção Inteligente")
-
-    # ================================
-    # 🧠 SESSION STATE
-    # ================================
-    defaults = {
-        "rodando": False,
-        "pausado": False,
-        "cancelado": False,
-        "resultados": [],
-        "indice": 0,
-        "df_proc": None,
-        "total": 0
-    }
-
-    for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
+    st.subheader("🚀 Prospecção Inteligente")
 
     # ================================
-    # 🧠 FUNÇÕES
+    # 🧠 IBGE → UF
     # ================================
     def extrair_uf_ibge(valor):
         try:
             codigo = str(valor).split("-")[0][:2]
-            return {
-                "41":"PR","42":"SC","43":"RS","35":"SP","33":"RJ"
-            }.get(codigo, "")
+
+            mapa = {
+                "11":"RO","12":"AC","13":"AM","14":"RR","15":"PA","16":"AP","17":"TO",
+                "21":"MA","22":"PI","23":"CE","24":"RN","25":"PB","26":"PE","27":"AL","28":"SE","29":"BA",
+                "31":"MG","32":"ES","33":"RJ","35":"SP",
+                "41":"PR","42":"SC","43":"RS",
+                "50":"MS","51":"MT","52":"GO","53":"DF"
+            }
+
+            return mapa.get(codigo, "")
         except:
             return ""
 
@@ -50,16 +39,9 @@ with aba1:
         except:
             return ""
 
-    def gerar_whatsapp(tel):
-        tel = ''.join(filter(str.isdigit, str(tel)))
-        return f"https://wa.me/55{tel}" if tel else ""
-
-    def potencial(a):
-        if a >= 50: return "🔥 ALTA"
-        elif a >= 20: return "🟠 BOA"
-        elif a >= 10: return "🟡 MÉDIA"
-        return "🟢 BAIXA"
-
+    # ================================
+    # 🔄 API
+    # ================================
     def consultar_cnpj(cnpj):
 
         urls = [
@@ -72,20 +54,33 @@ with aba1:
             try:
                 r = requests.get(url, timeout=10)
                 if r.status_code == 200:
-                    d = r.json()
+                    data = r.json()
 
                     return {
-                        "empresa": d.get("razao_social") or d.get("nome") or "",
-                        "fantasia": d.get("nome_fantasia") or d.get("fantasia") or "",
-                        "municipio": d.get("municipio") or "",
-                        "uf": d.get("uf") or "",
-                        "cnae": d.get("cnae_fiscal_descricao") or "",
-                        "tel": d.get("ddd_telefone_1") or d.get("telefone") or ""
+                        "razao_social": data.get("razao_social") or data.get("nome") or "",
+                        "nome_fantasia": data.get("nome_fantasia") or data.get("fantasia") or "",
+                        "municipio": data.get("municipio") or "",
+                        "uf": data.get("uf") or "",
+                        "cnae": data.get("cnae_fiscal_descricao") or "",
+                        "telefone": data.get("ddd_telefone_1") or data.get("telefone") or ""
                     }
             except:
                 continue
 
         return {}
+
+    # ================================
+    # 💰 POTENCIAL
+    # ================================
+    def potencial(af):
+        if af >= 50: return "🔥 ALTA"
+        elif af >= 20: return "🟠 BOA"
+        elif af >= 10: return "🟡 MÉDIA"
+        return "🟢 BAIXA"
+
+    def gerar_whatsapp(t):
+        t = ''.join(filter(str.isdigit, str(t)))
+        return f"https://wa.me/55{t}" if t else ""
 
     # ================================
     # 📥 UPLOAD
@@ -94,16 +89,15 @@ with aba1:
 
     if files:
 
-        if len(files) > 5:
-            st.error("Máximo de 5 arquivos permitido")
-            st.stop()
-
         dfs = []
-        for f in files:
-            if f.name.endswith(".csv"):
-                dfs.append(pd.read_csv(f, sep=';', encoding='latin1'))
+
+        for file in files:
+            if file.name.endswith(".csv"):
+                df_temp = pd.read_csv(file, sep=';', encoding='latin1')
             else:
-                dfs.append(pd.read_excel(f))
+                df_temp = pd.read_excel(file)
+
+            dfs.append(df_temp)
 
         df = pd.concat(dfs, ignore_index=True)
         df.columns = df.columns.astype(str)
@@ -113,10 +107,14 @@ with aba1:
         df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r"\D","",regex=True).str.zfill(14)
         df = df.drop_duplicates(subset=[col_cnpj])
 
+        # ================================
+        # 📍 DETECTA MUNICÍPIO
+        # ================================
         col_municipio = [c for c in df.columns if "MUNIC" in c.upper()]
 
         if col_municipio:
             col_municipio = col_municipio[0]
+
             df["cidade"] = df[col_municipio].apply(extrair_cidade)
             df["uf"] = df[col_municipio].apply(extrair_uf_ibge)
         else:
@@ -124,108 +122,74 @@ with aba1:
             df["uf"] = ""
 
         df["Afastamentos"] = 1
+
+        # ================================
+        # 📂 ORGANIZA GRUPOS
+        # ================================
         df["grupo"] = df["uf"].apply(lambda x: x if x else "AVULSOS")
 
         grupos = df["grupo"].unique()
 
         st.markdown("## 📂 Grupos encontrados")
 
-        # ================================
-        # 🎛 CONTROLES
-        # ================================
         for g in grupos:
 
-            df_g = df[df["grupo"] == g].reset_index(drop=True)
+            df_g = df[df["grupo"] == g]
 
             st.markdown(f"### 📍 {g} ({len(df_g)} empresas)")
 
-            c1, c2, c3, c4 = st.columns(4)
+            if st.button(f"🚀 Processar {g}"):
 
-            if c1.button(f"▶ Iniciar {g}", key=f"iniciar_{g}"):
-                st.session_state.rodando = True
-                st.session_state.pausado = False
-                st.session_state.cancelado = False
-                st.session_state.resultados = []
-                st.session_state.indice = 0
-                st.session_state.df_proc = df_g
-                st.session_state.total = len(df_g)
+                resultados = []
+                progress = st.progress(0)
+                tabela = st.empty()
 
-            if c2.button("⏸ Pausar", key=f"pausar_{g}"):
-                st.session_state.pausado = True
+                total = len(df_g)
+                lote = 10
 
-            if c3.button("▶ Continuar", key=f"continuar_{g}"):
-                st.session_state.pausado = False
+                for i in range(0, total, lote):
 
-            if c4.button("❌ Cancelar", key=f"cancelar_{g}"):
-                st.session_state.cancelado = True
-                st.session_state.rodando = False
+                    bloco = df_g.iloc[i:i+lote]
 
-        # ================================
-        # ⚡ PROCESSAMENTO
-        # ================================
-        if st.session_state.rodando and not st.session_state.pausado:
+                    for _, row in bloco.iterrows():
 
-            df_proc = st.session_state.df_proc
-            i = st.session_state.indice
+                        cnpj = row[col_cnpj]
 
-            if i < st.session_state.total and not st.session_state.cancelado:
+                        dados = {}
+                        for tentativa in range(3):
+                            dados = consultar_cnpj(cnpj)
+                            if dados.get("razao_social"):
+                                break
+                            time.sleep(1)
 
-                bloco = df_proc.iloc[i:i+5]
+                        linha = {
+                            "Empresa": dados.get("razao_social","NÃO ENCONTRADO"),
+                            "Fantasia": dados.get("nome_fantasia",""),
+                            "CNPJ": cnpj,
+                            "Município": dados.get("municipio") or row["cidade"],
+                            "UF": dados.get("uf") or row["uf"],
+                            "Telefone": dados.get("telefone",""),
+                            "WhatsApp": gerar_whatsapp(dados.get("telefone")),
+                            "CNAE": dados.get("cnae",""),
+                            "Afastamentos": row["Afastamentos"],
+                            "Potencial": potencial(row["Afastamentos"])
+                        }
 
-                def worker(row):
-                    cnpj = row[col_cnpj]
-                    d = consultar_cnpj(cnpj)
+                        resultados.append(linha)
 
-                    return {
-                        "Empresa": d.get("empresa","NÃO ENCONTRADO"),
-                        "Fantasia": d.get("fantasia",""),
-                        "CNPJ": cnpj,
-                        "Município": d.get("municipio") or row["cidade"],
-                        "UF": d.get("uf") or row["uf"],
-                        "Telefone": d.get("tel",""),
-                        "WhatsApp": gerar_whatsapp(d.get("tel")),
-                        "CNAE": d.get("cnae",""),
-                        "Afastamentos": row["Afastamentos"],
-                        "Potencial": potencial(row["Afastamentos"])
-                    }
+                        time.sleep(0.4)
 
-                with ThreadPoolExecutor(max_workers=5) as executor:
-                    novos = list(executor.map(worker, [r for _, r in bloco.iterrows()]))
+                    progress.progress(min((i+lote)/total,1.0))
+                    tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
 
-                st.session_state.resultados.extend(novos)
-                st.session_state.indice += len(bloco)
+                    time.sleep(1.5)
 
-                time.sleep(0.2)
-                st.rerun()
+                final = pd.DataFrame(resultados)
 
-            else:
-                st.session_state.rodando = False
+                st.success(f"{len(final)} empresas processadas")
 
-        # ================================
-        # 📊 TABELA TEMPO REAL
-        # ================================
-        if st.session_state.resultados:
-
-            df_view = pd.DataFrame(st.session_state.resultados)
-
-            st.data_editor(
-                df_view,
-                use_container_width=True,
-                column_config={
-                    "WhatsApp": st.column_config.LinkColumn(
-                        "WhatsApp",
-                        display_text="💬 Abrir"
-                    )
-                }
-            )
-
-            progresso = min(len(df_view) / st.session_state.total, 1.0)
-
-            st.progress(progresso)
-            st.write(f"{int(progresso*100)}% concluído")
-
-            csv = df_view.to_csv(index=False).encode("utf-8")
-            st.download_button("📤 Baixar Leads", csv, "leads.csv")
+                csv = final.to_csv(index=False).encode('utf-8')
+                st.download_button("📤 Baixar Leads", csv, f"leads_{g}.csv")
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
