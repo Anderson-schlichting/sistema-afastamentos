@@ -497,7 +497,7 @@ with aba2:
     # ================================
     # 🧠 CNPJ
     # ================================
-    cnpj_input = st.text_input("Digite o CNPJ")
+    cnpj_input = st.text_input("Digite o CNPJ", key="cnpj_input_aba2")
     dados = {}
     cnpj = ""
 
