@@ -8,6 +8,7 @@ import pdfplumber
 # cria abas
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 
+with aba1:
     st.subheader("🚀 Prospecção Inteligente + FAP")
 
     # ================================
