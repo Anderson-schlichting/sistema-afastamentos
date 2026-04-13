@@ -10,35 +10,40 @@ aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 
 with aba1:
 
-    import os
-
     st.subheader("🚀 Prospecção Inteligente + FAP")
 
     # ================================
-    # 📂 BASE EDITAIS (CORRIGIDA)
+    # 📂 BASE EDITAIS (ONLINE)
     # ================================
-    @st.cache_data(show_spinner="Carregando base de editais...")
+    @st.cache_data(show_spinner="Buscando editais online...")
     def carregar_editais():
 
-        pasta = "editoriais"
-        arquivos = []
+        import requests
+        import re
+        import pdfplumber
+        from io import BytesIO
+
+        urls = [
+            "https://www.gov.br/previdencia/pt-br/assuntos/previdencia-social/saude-e-seguranca-do-trabalhador/fap/arquivos-editais/EDITAL02FAPDOU30042021.pdf",
+            "https://www.gov.br/previdencia/pt-br/assuntos/previdencia-social/saude-e-seguranca-do-trabalhador/fap/arquivos-editais/fap04.pdf",
+            "https://www.gov.br/previdencia/pt-br/assuntos/previdencia-social/saude-e-seguranca-do-trabalhador/fap/arquivos-editais/Edital.FAP.pdf",
+            "https://www.gov.br/previdencia/pt-br/assuntos/previdencia-social/saude-e-seguranca-do-trabalhador/fap/arquivos-editais/EDITAISFAP06A102021_05_24_dou.pdf",
+            "https://www.gov.br/previdencia/pt-br/assuntos/previdencia-social/saude-e-seguranca-do-trabalhador/fap/arquivos-editais/FAPEDITAIS11A162021.pdf"
+        ]
+
         cnpjs = set()
 
-        if os.path.exists(pasta):
-            for f in os.listdir(pasta):
-                if f.endswith(".pdf"):
-                    arquivos.append(os.path.join(pasta, f))
-        else:
-            st.error(f"❌ Pasta '{pasta}' não encontrada")
-            return set()
-
-        for arq in arquivos:
+        for url in urls:
             try:
-                with pdfplumber.open(arq) as pdf:
+                response = requests.get(url, timeout=15)
+
+                if response.status_code == 200:
+
+                    pdf = pdfplumber.open(BytesIO(response.content))
 
                     for p in pdf.pages:
 
-                        # 🔥 1. TABELAS (principal)
+                        # 🔥 TABELAS
                         tabelas = p.extract_tables()
 
                         if tabelas:
@@ -49,7 +54,7 @@ with aba1:
                                             encontrados = re.findall(r"\d{14}", str(celula))
                                             cnpjs.update(encontrados)
 
-                        # 🔥 2. TEXTO (fallback)
+                        # 🔥 TEXTO (fallback)
                         txt = p.extract_text()
 
                         if txt:
@@ -57,8 +62,8 @@ with aba1:
                             encontrados = [re.sub(r"\D", "", cnpj) for cnpj in encontrados]
                             cnpjs.update(encontrados)
 
-            except Exception as e:
-                st.error(f"Erro ao ler {arq}: {e}")
+            except Exception:
+                continue
 
         return cnpjs
 
