@@ -13,7 +13,7 @@ with aba1:
     st.subheader("🚀 Prospecção Inteligente + FAP")
 
     # ================================
-    # 📂 BASE EDITAIS
+    # 📂 BASE EDITAIS (CORRIGIDA)
     # ================================
     @st.cache_data(show_spinner="Carregando base de editais...")
     def carregar_editais():
@@ -30,13 +30,30 @@ with aba1:
         for arq in arquivos:
             try:
                 with pdfplumber.open(arq) as pdf:
+
                     for p in pdf.pages:
+
+                        # 🔥 1. TENTAR EXTRAIR TABELAS (PRINCIPAL)
+                        tabelas = p.extract_tables()
+
+                        if tabelas:
+                            for tabela in tabelas:
+                                for linha in tabela:
+                                    for celula in linha:
+                                        if celula:
+                                            encontrados = re.findall(r"\d{14}", str(celula))
+                                            cnpjs.update(encontrados)
+
+                        # 🔥 2. FALLBACK TEXTO
                         txt = p.extract_text()
+
                         if txt:
-                            encontrados = re.findall(r"\d{14}", txt)
+                            encontrados = re.findall(r"\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}", txt)
+                            encontrados = [re.sub(r"\D", "", cnpj) for cnpj in encontrados]
                             cnpjs.update(encontrados)
-            except:
-                pass
+
+            except Exception as e:
+                st.warning(f"Erro ao ler {arq}")
 
         return cnpjs
 
@@ -135,7 +152,7 @@ with aba1:
         df.columns = df.columns.astype(str)
 
         # ================================
-        # 🔍 IDENTIFICA CNPJ
+        # 🔍 CNPJ
         # ================================
         col_cnpj_list = [c for c in df.columns if "CNPJ" in c.upper()]
 
@@ -186,7 +203,7 @@ with aba1:
         agrupado["POTENCIAL"] = agrupado["AFASTAMENTOS"].apply(potencial)
 
         # ================================
-        # 📂 GRUPOS (AQUI FICA O LOOP DO g)
+        # 📂 GRUPOS
         # ================================
         agrupado["grupo"] = agrupado["uf"].apply(lambda x: x if x else "AVULSOS")
 
@@ -200,7 +217,6 @@ with aba1:
 
             st.markdown(f"### 📍 {g} ({len(df_g)} empresas)")
 
-            # 🔥 BOTÃO AGORA CORRETO (DENTRO DO LOOP)
             if st.button(f"🚀 Processar {g}", key=f"btn_{g}"):
 
                 resultados = []
@@ -214,7 +230,6 @@ with aba1:
                 for i, (_, row) in enumerate(df_g.iterrows()):
 
                     cnpj = row[col_cnpj]
-
                     dados = consultar_cnpj(cnpj)
 
                     percent = int((i + 1) / total * 100)
