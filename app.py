@@ -1,13 +1,12 @@
-# 🔹 CRIA AS ABAS
-aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
+import streamlit as st
+import pandas as pd
+import requests
+import time
+import re
+import pdfplumber
 
-    import pandas as pd
-    import requests
-    import time
-    import streamlit as st
-    import re
-    import pdfplumber
-    from concurrent.futures import ThreadPoolExecutor
+# cria abas
+aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 
     st.subheader("🚀 Prospecção Inteligente + FAP")
 
