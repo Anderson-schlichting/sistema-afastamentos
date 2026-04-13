@@ -10,7 +10,6 @@ aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 
 with aba1:
 
-```
 import pandas as pd
 import requests
 import time
