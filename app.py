@@ -2,18 +2,16 @@ import streamlit as st
 
 # 🔹 1. CRIA AS ABAS
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
-# ================================
-
-# 📊 ABA 1 - FINAL COM AGRUPAMENTO POR CNPJ
-
-# ================================
-
-with aba1:
-
 import pandas as pd
 import requests
 import time
 import streamlit as st
+
+================================
+📊 ABA 1 - FINAL
+================================
+
+with aba1:
 
 st.subheader("🚀 Prospecção Inteligente")
 
@@ -106,7 +104,7 @@ if files:
     df.columns = df.columns.astype(str)
 
     # ================================
-    # 🧾 IDENTIFICA CNPJ
+    # 🧾 CNPJ
     # ================================
     col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()]
 
@@ -137,7 +135,7 @@ if files:
         df["uf"] = ""
 
     # ================================
-    # 🔥 AGRUPAMENTO REAL POR CNPJ
+    # 🔥 AGRUPAMENTO
     # ================================
     df["Afastamentos"] = 1
 
@@ -183,12 +181,7 @@ if files:
 
                     cnpj = row[col_cnpj]
 
-                    dados = {}
-                    for tentativa in range(3):
-                        dados = consultar_cnpj(cnpj)
-                        if dados.get("razao_social"):
-                            break
-                        time.sleep(1)
+                    dados = consultar_cnpj(cnpj)
 
                     linha = {
                         "Empresa": dados.get("razao_social","NÃO ENCONTRADO"),
@@ -205,12 +198,8 @@ if files:
 
                     resultados.append(linha)
 
-                    time.sleep(0.4)
-
                 progress.progress(min((i+lote)/total, 1.0))
                 tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
-
-                time.sleep(1.5)
 
             final = pd.DataFrame(resultados)
 
