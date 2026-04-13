@@ -18,12 +18,18 @@ with aba1:
     @st.cache_data(show_spinner="Carregando base de editais...")
     def carregar_editais():
 
-        arquivos = [
-            "editoriais/2021.pdf",
-            "editoriais/2022.pdf",
-            "editoriais/2023.pdf",
-            "editoriais/2024.pdf"
-        ]
+      import os
+
+pasta = "editoriais"
+
+arquivos = []
+
+if os.path.exists(pasta):
+    for f in os.listdir(pasta):
+        if f.endswith(".pdf"):
+            arquivos.append(os.path.join(pasta, f))
+else:
+    st.error(f"❌ Pasta '{pasta}' não encontrada")
 
         cnpjs = set()
 
