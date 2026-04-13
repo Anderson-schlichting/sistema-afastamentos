@@ -9,10 +9,11 @@ import pdfplumber
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 
 with aba1:
+
     st.subheader("🚀 Prospecção Inteligente + FAP")
 
     # ================================
-    # 📂 BASE EDITAIS (CACHE)
+    # 📂 BASE EDITAIS
     # ================================
     @st.cache_data(show_spinner="Carregando base de editais...")
     def carregar_editais():
@@ -79,7 +80,7 @@ with aba1:
     # ================================
     # 📥 UPLOAD
     # ================================
-    files = st.file_uploader("Envie até 5 planilhas", accept_multiple_files=True)
+    files = st.file_uploader("Envie até 5 planilhas", accept_multiple_files=True, key="upload_aba1")
 
     if files:
 
@@ -131,7 +132,7 @@ with aba1:
         # 🔥 AGRUPAMENTO REAL
         # ================================
         agrupado = df.groupby(col_cnpj).agg(
-            AFASTAMENTOS=("CNPJ", "count"),
+            AFASTAMENTOS=(col_cnpj, "count"),
             B91=("B91", "sum"),
             cidade=("cidade", "first"),
             uf=("uf", "first")
@@ -156,7 +157,7 @@ with aba1:
 
             st.markdown(f"### 📍 {g} ({len(df_g)} empresas)")
 
-            if st.button(f"🚀 Processar {g}"):
+            if st.button(f"🚀 Processar {g}", key=f"btn_{g}"):
 
                 resultados = []
                 progress = st.progress(0)
@@ -188,7 +189,7 @@ with aba1:
 
                     resultados.append(linha)
 
-                    progress.progress((i+1)/total)
+                    progress.progress((i + 1) / total)
                     tabela.dataframe(pd.DataFrame(resultados), use_container_width=True)
 
                     time.sleep(0.3)
@@ -198,7 +199,13 @@ with aba1:
                 st.success(f"{len(final)} empresas processadas")
 
                 csv = final.to_csv(index=False).encode('utf-8')
-                st.download_button("📤 Baixar Leads", csv, f"leads_{g}.csv")
+
+                st.download_button(
+                    "📤 Baixar Leads",
+                    csv,
+                    f"leads_{g}.csv",
+                    key=f"download_{g}"
+                )
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
