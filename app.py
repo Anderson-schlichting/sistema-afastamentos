@@ -3,7 +3,7 @@ import streamlit as st
 # 🔹 1. CRIA AS ABAS
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
-# 📊 ABA 1 - MÁQUINA DE VENDAS FINAL (COM CNPJ PURO)
+# 📊 ABA 1 - MÁQUINA DE VENDAS FINAL COMPLETA
 # ================================
 with aba1:
 
@@ -40,7 +40,7 @@ with aba1:
             return ""
 
     # ================================
-    # 🔄 API ULTRA ROBUSTA
+    # 🔄 API ROBUSTA
     # ================================
     @st.cache_data(ttl=86400)
     def consultar_cnpj(cnpj):
@@ -121,33 +121,40 @@ with aba1:
         return f"https://wa.me/55{tel}" if tel else ""
 
     # ================================
-    # 📥 UPLOAD
+    # 📥 UPLOAD MULTI
     # ================================
     files = st.file_uploader("Envie até 5 planilhas", accept_multiple_files=True)
 
     if files:
 
-    if len(files) > 5:
-        st.error("⚠️ Máximo de 5 arquivos")
-        st.stop()
+        if len(files) > 5:
+            st.error("⚠️ Máximo de 5 arquivos")
+            st.stop()
 
-    dfs = []
+        dfs = []
 
-    for file in files:
+        for file in files:
+            if file.name.endswith(".csv"):
+                df_temp = pd.read_csv(file, sep=';', encoding='latin1')
+            else:
+                df_temp = pd.read_excel(file)
 
-        if file.name.endswith(".csv"):
-            df_temp = pd.read_csv(file, sep=';', encoding='latin1')
-        else:
-            df_temp = pd.read_excel(file)
+            dfs.append(df_temp)
 
-        dfs.append(df_temp)
-
-    df = pd.concat(dfs, ignore_index=True)
-
-    df.drop_duplicates(inplace=True)
+        df = pd.concat(dfs, ignore_index=True)
+        df.columns = df.columns.astype(str)
 
         # ================================
-        # 🔍 VERIFICA SE TEM MUNICÍPIO
+        # 🔍 CNPJ
+        # ================================
+        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
+
+        df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r"\D", "", regex=True).str.zfill(14)
+
+        df = df.drop_duplicates(subset=[col_cnpj])
+
+        # ================================
+        # 📍 MUNICÍPIO (OPCIONAL)
         # ================================
         col_municipio = [c for c in df.columns if "MUNIC" in c.upper()]
 
@@ -165,14 +172,13 @@ with aba1:
             }).reset_index()
 
         else:
-            # 🔥 CNPJ PURO
             agrupado = df[[col_cnpj]].copy()
             agrupado["cidade_ibge"] = ""
             agrupado["uf_ibge"] = ""
 
-        agrupado["Afastamentos"] = df.groupby(col_cnpj).size().values if len(df.columns) > 1 else 1
+        agrupado["Afastamentos"] = 1
 
-        st.success(f"✅ {len(agrupado)} empresas carregadas")
+        st.success(f"✅ {len(agrupado)} empresas únicas carregadas")
 
         estados = agrupado["uf_ibge"].unique() if col_municipio else ["BR"]
 
