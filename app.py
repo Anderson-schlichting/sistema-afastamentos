@@ -1,233 +1,187 @@
-
 # ================================
-# 📊 ABAS
-# ================================
-aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
-
-# ================================
-# 📊 ABA 1
+# 📊 ABA 1 NOVA (OTIMIZADA)
 # ================================
 with aba1:
 
-    st.subheader("📊 Prospecção Inteligente - Santa Catarina")
-
-    import os
-    import time
-    import requests
     import pandas as pd
+    import requests
+    import time
+    import os
+    import streamlit as st
 
-    CACHE_FILE = "cnpj_cache.csv"
+    st.subheader("📊 Prospecção Inteligente")
 
-# ================================
-# 📍 LISTA SC
-# ================================
-CIDADES_SC = [
-"ABELARDO LUZ","AGROLÂNDIA","AGRONÔMICA","ÁGUA DOCE","ÁGUAS DE CHAPECÓ",
-"ÁGUAS FRIAS","ÁGUAS MORNAS","ALFREDO WAGNER","ALTO BELA VISTA",
-"ANCHIETA","ANGELINA","ANITA GARIBALDI","ANITÁPOLIS","ANTÔNIO CARLOS",
-"APIÚNA","ARABUTÃ","ARAQUARI","ARARANGUÁ","ARMAZÉM","ARROIO TRINTA",
-"ARVOREDO","ASCURRA","ATALANTA","AURORA","BALNEÁRIO ARROIO DO SILVA",
-"BALNEÁRIO CAMBORIÚ","BALNEÁRIO BARRA DO SUL","BALNEÁRIO GAIVOTA",
-"BARRA BONITA","BARRA VELHA","BELMONTE","BENEDITO NOVO","BIGUAÇU",
-"BLUMENAU","BOCAINA DO SUL","BOMBINHAS","BOM JARDIM DA SERRA",
-"BOM JESUS","BOM JESUS DO OESTE","BOM RETIRO","BOTUVERÁ","BRAÇO DO NORTE",
-"BRAÇO DO TROMBUDO","BRUNÓPOLIS","BRUSQUE","CAÇADOR","CAIBI","CALMON",
-"CAMBORIÚ","CAMPO ALEGRE","CAMPO BELO DO SUL","CAMPO ERÊ",
-"CAMPOS NOVOS","CANELINHA","CANOINHAS","CAPÃO ALTO","CAPINZAL",
-"CAPIVARI DE BAIXO","CATANDUVAS","CAXAMBU DO SUL","CELSO RAMOS",
-"CHAPADÃO DO LAGEADO","CHAPECÓ","COCAL DO SUL","CONCÓRDIA",
-"CORDILHEIRA ALTA","CORONEL FREITAS","CORONEL MARTINS","CORUPÁ",
-"CRICIÚMA","CUNHA PORÃ","CUNHATAÍ","CURITIBANOS","DESCANSO",
-"DIONÍSIO CERQUEIRA","DONA EMMA","DOUTOR PEDRINHO","ENTRE RIOS",
-"ERMO","ERVAL VELHO","FAXINAL DOS GUEDES","FLOR DO SERTÃO",
-"FLORIANÓPOLIS","FORMOSA DO SUL","FORQUILHINHA","FRAIBURGO",
-"FREI ROGÉRIO","GALVÃO","GAROPABA","GARUVA","GASPAR",
-"GOIO-EN","GOVERNADOR CELSO RAMOS","GRÃO-PARÁ","GRAVATAL",
-"GUABIRUBA","GUARACIABA","GUARAMIRIM","GUARUJÁ DO SUL",
-"GUATAMBÚ","HERVAL D’OESTE","IBIAM","IBICARÉ","IBIRAMA",
-"IÇARA","ILHOTA","IMARUÍ","IMBITUBA","IMBUIA","INDAIAL",
-"IOMERÊ","IPIRA","IPORÃ DO OESTE","IPUAÇU","IPUMIRIM",
-"IRACEMINHA","IRANI","IRATI","IRINEÓPOLIS","ITÁ","ITAÍÓPOLIS",
-"ITAJÁ","ITAPEMA","ITAPIRANGA","ITAPOÁ","ITUPORANGA",
-"JABORÁ","JACINTO MACHADO","JAGUARUNA","JARAGUÁ DO SUL",
-"JARDINÓPOLIS","JOAÇABA","JOINVILLE","JOSÉ BOITEUX",
-"JUPIÁ","LACERDÓPOLIS","LAGES","LAGUNA","LAJEADO GRANDE",
-"LAURENTINO","LAURO MÜLLER","LEBON RÉGIS","LEOBERTO LEAL",
-"LINDÓIA DO SUL","LONTRAS","LUIZ ALVES","LUZERNA","MACIEIRA",
-"MAFRA","MAJOR GERCINO","MAJOR VIEIRA","MARACAJÁ","MARAVILHA",
-"MAREMA","MASSARANDUBA","MATOS COSTA","MELEIRO","MIRIM DOCE",
-"MODELO","MONDAÍ","MONTE CARLO","MONTE CASTELO","MORRO DA FUMAÇA",
-"MORRO GRANDE","NAVEGANTES","NOVA ERECHIM","NOVA ITABERABA",
-"NOVA TRENTO","NOVA VENEZA","NOVO HORIZONTE","ORLEANS","OTACÍLIO COSTA",
-"OURO","OURO VERDE","PAIAL","PAINEL","PALHOÇA","PALMA SOLA",
-"PALMEIRA","PALMITOS","PAPANDUVA","PARAÍSO","PASSO DE TORRES",
-"PASSOS MAIA","PAULO LOPES","PEDRAS GRANDES","PENHA","PERITIBA",
-"PESCARIA BRAVA","PETROLÂNDIA","PIÇARRAS","PINHALZINHO","PINHEIRO PRETO",
-"PIRATUBA","PLANALTO ALEGRE","POMERODE","PONTE ALTA",
-"PONTE ALTA DO NORTE","PONTE SERRADA","PORTO BELO","PORTO UNIÃO",
-"POUSO REDONDO","PRAIA GRANDE","PRESIDENTE CASTELLO BRANCO",
-"PRESIDENTE GETÚLIO","PRESIDENTE NEREU","PRINCESA","QUILOMBO",
-"RANCHO QUEIMADO","RIO DAS ANTAS","RIO DO CAMPO","RIO DO OESTE",
-"RIO DOS CEDROS","RIO DO SUL","RIO FORTUNA","RIO NEGRINHO",
-"RIO RUFINO","RIQUEZA","RODEIO","ROMELÂNDIA","SALETE",
-"SALTINHO","SALTO VELOSO","SANGÃO","SANTA CECÍLIA",
-"SANTA HELENA","SANTA ROSA DE LIMA","SANTA ROSA DO SUL",
-"SANTA TEREZINHA","SANTA TEREZINHA DO PROGRESSO",
-"SANTIAGO DO SUL","SANTO AMARO DA IMPERATRIZ","SÃO BENTO DO SUL",
-"SÃO BERNARDINO","SÃO BONIFÁCIO","SÃO CARLOS","SÃO CRISTÓVÃO DO SUL",
-"SÃO DOMINGOS","SÃO FRANCISCO DO SUL","SÃO JOÃO BATISTA",
-"SÃO JOÃO DO ITAPERIÚ","SÃO JOÃO DO OESTE","SÃO JOÃO DO SUL",
-"SÃO JOAQUIM","SÃO JOSÉ","SÃO JOSÉ DO CEDRO","SÃO JOSÉ DO CERRITO",
-"SÃO LOURENÇO DO OESTE","SÃO LUDGERO","SÃO MARTINHO",
-"SÃO MIGUEL DA BOA VISTA","SÃO MIGUEL DO OESTE","SÃO PEDRO DE ALCÂNTARA",
-"SAUDADES","SCHROEDER","SEARA","SERRA ALTA","SIDERÓPOLIS",
-"SOMBRIO","SUL BRASIL","TAIÓ","TANGARÁ","TIGRINHOS","TIJUCAS",
-"TIMBÉ DO SUL","TIMBÓ","TIMBÓ GRANDE","TRÊS BARRAS","TREVISO",
-"TREZE DE MAIO","TREZE TÍLIAS","TROMBUDO CENTRAL","TUBARÃO",
-"TUNÁPOLIS","TURVO","UNIÃO DO OESTE","URUBICI","URUPEMA",
-"URUPEMA","URUSSANGA","VARGEÃO","VARGEM","VARGEM BONITA",
-"VIDAL RAMOS","VIDEIRA","VITOR MEIRELES","WITMARSUM","XANXERÊ",
-"XAVANTINA","XAXIM","ZORTÉA"
-]
+    CACHE_FILE = "cache_cnpj.csv"
 
     # ================================
-    # FUNÇÕES (AGORA NO LUGAR CERTO)
+    # 🔄 CONSULTA MULTI API
     # ================================
-   dados = consultar_cnpj_api(cnpj)
-        try:
-            url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
-            r = requests.get(url, timeout=5)
+    def consultar_cnpj(cnpj):
 
-            if r.status_code == 200:
-                data = r.json()
+        apis = [
+            f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}",
+            f"https://receitaws.com.br/v1/cnpj/{cnpj}",
+            f"https://api.cnpj.ws/cnpj/{cnpj}"
+        ]
 
-                return {
-                    "empresa": data.get("razao_social", ""),
-                    "telefone": data.get("ddd_telefone_1", ""),
-                    "cidade_api": data.get("municipio", ""),
-                    "uf": data.get("uf", ""),
-                    "socios": ", ".join([s.get("nome_socio", "") for s in data.get("qsa", [])])
-                }
+        for url in apis:
+            try:
+                r = requests.get(url, timeout=5)
 
-        except:
-            pass
+                if r.status_code == 200:
+                    data = r.json()
+
+                    return {
+                        "empresa": data.get("razao_social") or data.get("nome") or "",
+                        "telefone": data.get("ddd_telefone_1") or data.get("telefone") or "",
+                        "cidade": data.get("municipio") or data.get("cidade") or "",
+                        "uf": data.get("uf") or "",
+                    }
+            except:
+                continue
 
         return {}
 
-    def score(qtd):
+    # ================================
+    # 🎯 SCORE
+    # ================================
+    def calcular_score(qtd):
         if qtd >= 30:
             return "🔴 QUENTE"
         elif qtd >= 15:
             return "🟠 MÉDIO"
         return "🟢 FRIO"
 
-    def limpar_tel(t):
-        return str(t).replace("(","").replace(")","").replace("-","").replace(" ","")
-
     # ================================
-    # UPLOAD
+    # 📥 UPLOAD
     # ================================
     file = st.file_uploader("Envie CSV ou Excel")
 
-    if file and st.button("🚀 Processar"):
+    if file:
 
-        try:
-            if file.name.endswith(".csv"):
-                df = pd.read_csv(file, sep=';', encoding='latin1')
-            else:
-                df = pd.read_excel(file)
+        if file.name.endswith(".csv"):
+            df = pd.read_csv(file, sep=';', encoding='latin1')
+        else:
+            df = pd.read_excel(file)
 
-            df.columns = df.columns.astype(str)
+        df.columns = df.columns.astype(str)
 
-            col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
+        # ================================
+        # 🔍 IDENTIFICAR CNPJ
+        # ================================
+        col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()]
 
-            df[col_cnpj] = (
-                df[col_cnpj]
-                .astype(str)
-                .str.replace(r"\D","",regex=True)
-                .str.zfill(14)
-            )
+        if not col_cnpj:
+            st.error("Coluna CNPJ não encontrada")
+            st.stop()
 
-            col_cidade = [c for c in df.columns if "CIDADE" in c.upper() or "MUNIC" in c.upper()]
+        col_cnpj = col_cnpj[0]
 
-            if col_cidade:
-                df["cidade"] = df[col_cidade[0]].astype(str).str.upper()
-                df = df[df["cidade"].isin(CIDADES_SC)]
+        df[col_cnpj] = (
+            df[col_cnpj]
+            .astype(str)
+            .str.replace(r"\D", "", regex=True)
+            .str.zfill(14)
+        )
 
-            if df.empty:
-                st.warning("Nenhuma empresa encontrada em SC")
-                st.stop()
+        # ================================
+        # 📊 AGRUPAR (AFASTAMENTOS)
+        # ================================
+        agrupado = df.groupby(col_cnpj).size().reset_index(name="Afastamentos")
+        agrupado["Score"] = agrupado["Afastamentos"].apply(calcular_score)
 
-            st.success(f"{len(df)} registros encontrados em SC")
+        # ================================
+        # 📂 CACHE
+        # ================================
+        if os.path.exists(CACHE_FILE):
+            cache = pd.read_csv(CACHE_FILE)
+        else:
+            cache = pd.DataFrame(columns=["CNPJ","empresa","telefone","cidade","uf"])
 
-            agrupado = df.groupby(col_cnpj).size().reset_index(name="Afastamentos")
-            agrupado["Score"] = agrupado["Afastamentos"].apply(score)
+        # ================================
+        # 📦 DIVIDIR POR ESTADO
+        # ================================
+        st.markdown("## 📂 Blocos por Estado")
 
-            ranking = agrupado.sort_values("Afastamentos", ascending=False)
+        # inicialmente sem UF → será preenchido pela API
+        agrupado["uf"] = ""
 
-            st.markdown("## 📊 Ranking inicial")
-            st.dataframe(ranking.head(50), use_container_width=True)
+        estados = ["SC","PR","RS","SP","MG"]
 
-            # CACHE
-            if os.path.exists(CACHE_FILE):
-                cache_df = pd.read_csv(CACHE_FILE)
-            else:
-                cache_df = pd.DataFrame(columns=["CNPJ","empresa","telefone","cidade_api","uf","socios"])
+        for uf in estados:
 
-            dados_lista = []
-            consultar = []
+            st.markdown(f"### 📍 Estado: {uf}")
 
-            for cnpj in ranking[col_cnpj]:
+            if st.button(f"Consultar {uf}"):
 
-                match = cache_df[cache_df["CNPJ"] == cnpj]
+                df_uf = agrupado.copy()
 
-                if not match.empty and pd.notna(match.iloc[0]["empresa"]) and match.iloc[0]["empresa"] != "":
-                    dados_lista.append(match.iloc[0].to_dict())
-                else:
-                    consultar.append(cnpj)
+                resultados = []
+                consultar = []
 
-            st.info(f"📦 Cache: {len(dados_lista)} | 🔄 Consultar: {len(consultar)}")
+                # ================================
+                # 🔍 CACHE
+                # ================================
+                for cnpj in df_uf[col_cnpj]:
 
-            progress = st.progress(0)
+                    encontrado = cache[cache["CNPJ"] == cnpj]
 
-            total = min(len(consultar), 50)
+                    if not encontrado.empty:
+                        resultados.append(encontrado.iloc[0].to_dict())
+                    else:
+                        consultar.append(cnpj)
 
-            for i, cnpj in enumerate(consultar[:50]):
+                st.info(f"Cache: {len(resultados)} | Consultar: {len(consultar)}")
 
-                dados = consultar_cnpj(cnpj)
+                progress = st.progress(0)
 
-                if dados and dados.get("empresa"):
-                    registro = {"CNPJ": cnpj, **dados}
-                    dados_lista.append(registro)
+                # ================================
+                # ⚡ PROCESSAMENTO EM LOTE (10)
+                # ================================
+                lote = 10
 
-                    cache_df = pd.concat([cache_df, pd.DataFrame([registro])], ignore_index=True)
+                for i in range(0, len(consultar), lote):
 
-                progress.progress(int((i+1)/total * 100))
-                time.sleep(0.2)
+                    bloco = consultar[i:i+lote]
 
-            cache_df.drop_duplicates(subset=["CNPJ"], inplace=True)
-            cache_df.to_csv(CACHE_FILE, index=False)
+                    for cnpj in bloco:
 
-            df_api = pd.DataFrame(dados_lista)
+                        dados = consultar_cnpj(cnpj)
 
-            final = ranking.merge(
-                df_api,
-                left_on=col_cnpj,
-                right_on="CNPJ",
-                how="left"
-            )
+                        if dados.get("empresa"):
+                            registro = {"CNPJ": cnpj, **dados}
+                            resultados.append(registro)
 
-            if "uf" in final.columns:
-                final["uf"] = final["uf"].fillna("").str.upper()
-                final = final[final["uf"] == "SC"]
+                            cache = pd.concat([cache, pd.DataFrame([registro])], ignore_index=True)
 
-            final["empresa"] = final["empresa"].fillna("NÃO ENCONTRADO")
+                    progress.progress(min((i+len(bloco))/len(consultar), 1.0))
+                    time.sleep(0.3)
 
-            st.markdown("## 📊 Ranking Final")
-            st.dataframe(final, use_container_width=True)
+                cache.drop_duplicates(subset=["CNPJ"], inplace=True)
+                cache.to_csv(CACHE_FILE, index=False)
 
-        except Exception as e:
-            st.error(f"Erro no sistema: {e}")
+                df_api = pd.DataFrame(resultados)
+
+                final = agrupado.merge(
+                    df_api,
+                    left_on=col_cnpj,
+                    right_on="CNPJ",
+                    how="left"
+                )
+
+                # ================================
+                # 📍 FILTRAR ESTADO
+                # ================================
+                final = final[final["uf"] == uf]
+
+                # ================================
+                # 📊 RANKING FINAL
+                # ================================
+                final = final.sort_values("Afastamentos", ascending=False)
+
+                st.success(f"{len(final)} empresas encontradas em {uf}")
+
+                st.dataframe(final, use_container_width=True)
 # ================================
 # 🔎 ABA 2 FINAL ESTÁVEL
 # ================================
