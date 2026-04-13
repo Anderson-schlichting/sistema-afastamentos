@@ -3,7 +3,7 @@ import streamlit as st
 # 🔹 1. CRIA AS ABAS
 aba1, aba2 = st.tabs(["📊 Análise", "🔎 Consulta FAP"])
 # ================================
-# 📊 ABA 1 - MÁQUINA DE PROSPECÇÃO FINAL
+# 📊 ABA 1 - MÁQUINA DE PROSPECÇÃO FINAL (CORRIGIDA)
 # ================================
 with aba1:
 
@@ -38,10 +38,9 @@ with aba1:
     def extrair_uf_ibge(valor):
         try:
             codigo = str(valor).split("-")[0][:2]
-            mapa = {
+            return {
                 "41":"PR","42":"SC","43":"RS","35":"SP","33":"RJ"
-            }
-            return mapa.get(codigo, "")
+            }.get(codigo, "")
         except:
             return ""
 
@@ -100,7 +99,6 @@ with aba1:
             st.stop()
 
         dfs = []
-
         for f in files:
             if f.name.endswith(".csv"):
                 dfs.append(pd.read_csv(f, sep=';', encoding='latin1'))
@@ -110,23 +108,11 @@ with aba1:
         df = pd.concat(dfs, ignore_index=True)
         df.columns = df.columns.astype(str)
 
-        # ================================
-        # 🔍 CNPJ
-        # ================================
         col_cnpj = [c for c in df.columns if "CNPJ" in c.upper()][0]
 
-        df[col_cnpj] = (
-            df[col_cnpj]
-            .astype(str)
-            .str.replace(r"\D","",regex=True)
-            .str.zfill(14)
-        )
-
+        df[col_cnpj] = df[col_cnpj].astype(str).str.replace(r"\D","",regex=True).str.zfill(14)
         df = df.drop_duplicates(subset=[col_cnpj])
 
-        # ================================
-        # 📍 MUNICÍPIO (SE EXISTIR)
-        # ================================
         col_municipio = [c for c in df.columns if "MUNIC" in c.upper()]
 
         if col_municipio:
@@ -155,7 +141,7 @@ with aba1:
 
             c1, c2, c3, c4 = st.columns(4)
 
-            if c1.button(f"▶ Iniciar {g}"):
+            if c1.button(f"▶ Iniciar {g}", key=f"iniciar_{g}"):
                 st.session_state.rodando = True
                 st.session_state.pausado = False
                 st.session_state.cancelado = False
@@ -164,13 +150,13 @@ with aba1:
                 st.session_state.df_proc = df_g
                 st.session_state.total = len(df_g)
 
-            if c2.button("⏸ Pausar"):
+            if c2.button("⏸ Pausar", key=f"pausar_{g}"):
                 st.session_state.pausado = True
 
-            if c3.button("▶ Continuar"):
+            if c3.button("▶ Continuar", key=f"continuar_{g}"):
                 st.session_state.pausado = False
 
-            if c4.button("❌ Cancelar"):
+            if c4.button("❌ Cancelar", key=f"cancelar_{g}"):
                 st.session_state.cancelado = True
                 st.session_state.rodando = False
 
